@@ -16,8 +16,12 @@ log = logging.getLogger("chiriebot")
 
 
 async def set_commands(bot: Bot) -> None:
+    # the descriptions are the bot's storefront: Telegram shows them in the menu and they are the
+    # only copy a user reads before deciding to tap, so they name the action, not the router.
     await bot.set_my_commands([
         BotCommand(command="start", description="Главное меню"),
+        BotCommand(command="search", description="Найти жильё в Кишинёве"),
+        BotCommand(command="add", description="Подать объявление бесплатно"),
         BotCommand(command="menu", description="Меню"),
         BotCommand(command="stats", description="Статистика (админ)"),
     ])

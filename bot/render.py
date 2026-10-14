@@ -11,6 +11,16 @@ def esc(v) -> str:
     return html.escape(str(v)) if v is not None else ""
 
 
+def hashtags(row) -> str:
+    """One line of search keywords: the public channel and its posts are indexed by Telegram
+    search, so an untagged card is invisible to anyone typing 'аренда кишинёв'."""
+    tags = ["#продажа" if row["deal"] == "sale" else "#аренда", "#кишинёв", "#chisinau"]
+    district = row["district"]
+    if district and district != "Другое":
+        tags.append("#" + str(district).replace(" ", ""))
+    return " ".join(tags)
+
+
 def listing_caption(row, show_status: bool = False) -> str:
     deal = DEAL_LABELS.get(row["deal"], row["deal"])
     ptype = PTYPE_LABELS.get(row["ptype"], row["ptype"])
@@ -32,19 +42,19 @@ def listing_caption(row, show_status: bool = False) -> str:
     if row["description"]:
         lines.append("")
         lines.append(esc(row["description"]))
+    lines.append("")
+    lines.append(hashtags(row))
     if show_status:
         lines.append("")
         lines.append(f"Статус: {STATUS_LABELS.get(row['status'], row['status'])}")
-    boosted = row["boosted_until"]
-    if boosted and boosted > "":
-        pass
     return "\n".join(lines)
 
 
 async def send_listing(bot, chat_id: int, row, owner: bool = False, with_keyboard: bool = True) -> None:
     photos = db.listing_photos(row)
     caption = listing_caption(row, show_status=owner)
-    kb = keyboards.listing_kb(row["id"], owner, bool(row["boosted_until"])) if with_keyboard else None
+    kb = keyboards.listing_kb(row["id"], owner, bool(row["boosted_until"]),
+                              contacts=db.listing_contacts(row)) if with_keyboard else None
     if photos:
         media = []
         for i, p in enumerate(photos[:10]):

@@ -13,18 +13,19 @@ from handlers import boost as boost_h
 router = Router()
 
 WELCOME = (
-    "Привет! \U0001F3E0 <b>Găsește Casa</b> — квартиры и дома в Кишинёве, прямо в Telegram.\n\n"
-    "Мы <b>не посредник</b>: комиссию не берём вообще — ни с кого. Размещают и хозяева, и агенты — "
-    "контакт всегда на карточке, договариваешься напрямую.\n"
-    "\U0001F916 Размещение <b>бесплатное</b>. Хочешь выделиться — подними объявление через Boost."
+    "\U0001F3E0 <b>Găsește Casa</b> — квартиры и дома в Кишинёве прямо в Telegram.\n"
+    "Комиссию не берём вообще: ищешь сам, контакт на каждой карточке.\n\n"
+    "\U0001F447 Выбери, зачем зашёл, и жми кнопку:\n"
+    "🔍 <b>Ищу жильё</b> → «Поиск» или «📱 Открыть доску»\n"
+    "\u2795 <b>Сдаю / продаю</b> → «Разместить объект» (бесплатно, 2 минуты)"
 )
 
 if config.CHANNEL_URL:
-    WELCOME += f"\n\U0001F4E3 Все свежие объекты — в канале: {config.CHANNEL_URL}"
+    WELCOME += f"\n\U0001F4E3 Лента новых объектов — ещё и в канале: {config.CHANNEL_URL}"
 
 
 async def show_menu(target: Message, first_name: str | None = None) -> None:
-    text = WELCOME if first_name else "Главное меню:"
+    text = WELCOME if first_name else "Выбери, что нужно 👇"
     await target.answer(text, parse_mode="HTML", reply_markup=keyboards.main_menu())
 
 
@@ -91,10 +92,16 @@ async def cmd_menu(message: Message) -> None:
     await show_menu(message)
 
 
+@router.message(Command("add"))
+async def cmd_add(message: Message, state: FSMContext) -> None:
+    """Telegram shows this in the command list - the shortest path from any chat to the wizard."""
+    await add_h.begin(message, state)
+
+
 @router.callback_query(F.data == "menu:home")
 async def cb_home(cb: CallbackQuery) -> None:
     await cb.answer()
-    await cb.message.answer("Главное меню:", reply_markup=keyboards.main_menu())
+    await cb.message.answer("Выбери, что нужно 👇", reply_markup=keyboards.main_menu())
 
 
 @router.callback_query(F.data == "menu:help")

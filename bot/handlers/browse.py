@@ -1,5 +1,6 @@
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -41,7 +42,7 @@ def _summary(data: dict) -> str:
     bits = []
     bits.append(DEAL_LABELS.get(data.get("deal")) if data.get("deal") else "аренда и продажа")
     if data.get("rooms"):
-        bits.append("5+ комн." if data["rooms"] == 5 else f"{data['rooms']} комн.")
+        bits.append(f"{data['rooms']}+ комн." if data["rooms"] >= 3 else f"{data['rooms']} комн.")
     if data.get("ptype"):
         bits.append(PTYPE_LABELS.get(data["ptype"], data["ptype"]).lower())
     if data.get("district"):
@@ -92,8 +93,9 @@ async def _panel_msg(data: dict) -> tuple[str, InlineKeyboardMarkup]:
         ],
         [
             _chip("🛏 Все", not data.get("rooms"), "sf:rooms:all"),
-            *[_chip(str(r), data.get("rooms") == r, f"sf:rooms:{r}") for r in (1, 2, 3, 4)],
-            _chip("5+", data.get("rooms") == 5, "sf:rooms:5"),
+            _chip("1", data.get("rooms") == 1, "sf:rooms:1"),
+            _chip("2", data.get("rooms") == 2, "sf:rooms:2"),
+            _chip("3+", data.get("rooms") == 3, "sf:rooms:3"),
         ],
         [
             _chip("Квартира", data.get("ptype") == "apartment", "sf:ptype:apartment"),
@@ -152,9 +154,9 @@ async def _results_msg(data: dict) -> tuple[str, InlineKeyboardMarkup]:
     n = await db.count_search_listings(**_filters(data))
     if n == 0:
         text = (
-            "🔍 Ничего не найдено 😕\n"
+            "🔍 <b>Ничего не нашлось</b>\n"
             f"Фильтры: <i>{_summary(data)}</i>\n\n"
-            "Смени фильтры или добавь своё объявление — бесплатно."
+            "Измени фильтры или добавь своё объявление — размещение бесплатное."
         )
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🔍 Изменить фильтры", callback_data="sf:panel")],
@@ -208,6 +210,15 @@ async def _update(target: Message, state: FSMContext) -> None:
 
 
 # --- entry -----------------------------------------------------------------
+
+@router.message(Command("search"))
+async def cmd_search(message: Message, state: FSMContext) -> None:
+    """The command Telegram itself suggests: /search opens the filter panel in a fresh message."""
+    await state.clear()
+    await state.set_state(Search.on)
+    text, kb = await _panel_msg({})
+    await message.answer(text, parse_mode="HTML", reply_markup=kb)
+
 
 @router.callback_query(F.data == "menu:search")
 async def start_search(cb: CallbackQuery, state: FSMContext) -> None:
