@@ -10,6 +10,7 @@ import config
 import db
 import jobs
 import scheduler
+from fsm_sqlite import SqliteStorage
 from handlers import add, admin, boost, browse, fallback, profile, start
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -41,8 +42,12 @@ async def main() -> None:
 
     await db.init_db()
 
+    # bug #7: keep the submission wizard in sqlite, not RAM, so a restart mid-form is resumable.
+    storage = SqliteStorage(config.DB_PATH)
+    await storage.start()
+
     bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    dp = Dispatcher()
+    dp = Dispatcher(storage=storage)
 
     dp.include_router(start.router)
     dp.include_router(add.router)
@@ -83,6 +88,7 @@ async def main() -> None:
         if lifecycle is not None:
             lifecycle.cancel()
         await db.close_db()
+        await storage.close()
         await bot.session.close()
 
 
