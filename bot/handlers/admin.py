@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
@@ -9,6 +10,8 @@ import db
 import keyboards
 import publish
 import scheduler
+
+log = logging.getLogger("chiriebot.admin")
 
 router = Router()
 
@@ -29,6 +32,10 @@ async def moderate(cb: CallbackQuery, bot: Bot) -> None:
     if not row:
         await cb.message.answer("Объявление не найдено.")
         return
+    # idempotency (bug #2): a second tap on Approve must not publish a second channel post.
+    if row["status"] != "pending":
+        await cb.message.answer(f"Уже обработано (статус: {row['status']}).")
+        return
     status = "active" if action == "approve" else "rejected"
     await db.set_listing_status(listing_id, status)
     await db.log_event(f"moderation_{action}", listing_id=listing_id)
@@ -41,8 +48,12 @@ async def moderate(cb: CallbackQuery, bot: Bot) -> None:
                     "Его уже видят в поиске и в канале. Хочешь быть первым? Жми Boost \U0001F680")
             try:
                 await publish.publish_listing(bot, row)
-            except Exception:
-                pass  # publishing to channel/webapp must never block moderation
+            except Exception as e:
+                # a failed channel post must not stay silent (bug #1): tell the admin, keep moderation
+                log.exception("publish_listing failed for #%s", listing_id)
+                await cb.message.answer(
+                    f"\u26a0\ufe0f Объявление одобрено, но НЕ опубликовано в канале: "
+                    f"{type(e).__name__}: {str(e)[:120]}")
             # founders gift: the first GIFT_SLOTS publishers get free raises - this is the
             # headline of every outreach message, so it must arrive automatically, not by hand
             if await db.grant_gift_credits(row["user_id"], config.GIFT_BOOSTS, config.GIFT_SLOTS):

@@ -228,7 +228,7 @@ async function openDetail(id) {
   <div class="actions">
     <button class="btn" id="contactBtn" onclick="revealContact(${it.id})">📞 Показать контакт</button>
     <div class="contact-info" id="contactInfo"></div>
-    ${it.owner_tg === MY_ID ? `<button class="btn sec" onclick="toBot('boost_${it.id}')">\u{1F680} Поднять объявление (Boost)</button>` : ""}
+    ${it.is_owner ? `<button class="btn sec" onclick="toBot('boost_${it.id}')">\u{1F680} Поднять объявление (Boost)</button>` : ""}
     <button class="btn sec" onclick="closeSheet()">← К списку</button>
   </div>`;
   $("sheet").classList.add("open");

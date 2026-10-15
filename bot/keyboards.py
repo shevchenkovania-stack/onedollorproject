@@ -196,7 +196,9 @@ def rails_line() -> str:
         opts.append(f"{usd(config.CARD_PRICE_CENTS)} \U0001F4B3 картой")
     if config.BOOST_MDL:
         opts.append(f"{config.BOOST_MDL} MDL \U0001F4B0 {transfer_word()}")
-    opts.append(f"{config.BOOST_STARS} Stars \u2B50")
+    # Stars is an optional rail: BOOST_STARS=0 hides it everywhere (bug #8). MIA is the primary rail.
+    if config.BOOST_STARS:
+        opts.append(f"{config.BOOST_STARS} Stars \u2B50")
     return " / ".join(opts)
 
 
@@ -224,8 +226,10 @@ def boost_kb(listing_id: int, gift_credits: int = 0) -> InlineKeyboardMarkup:
         # cannot buy Stars at all (PROVIDER_ACCOUNT_INVALID), and there is no acquiring contract
         rows.append([InlineKeyboardButton(text=f"\U0001F4B0 {transfer_button()}",
                                           callback_data=f"manual:{listing_id}")])
-    rows.append([InlineKeyboardButton(text=f"\u2B50 Оплатить {config.BOOST_STARS} Stars",
-                                      callback_data=f"boostpay:{listing_id}")])
+    # Stars rail is hidden when BOOST_STARS=0 (bug #8); the free gift / card / MIA rails above stay.
+    if config.BOOST_STARS:
+        rows.append([InlineKeyboardButton(text=f"\u2B50 Оплатить {config.BOOST_STARS} Stars",
+                                          callback_data=f"boostpay:{listing_id}")])
     rows.append([InlineKeyboardButton(text="\u2b05\uFE0F Назад", callback_data=f"view:{listing_id}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

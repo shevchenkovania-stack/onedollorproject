@@ -150,9 +150,13 @@ async def api_listing(request: web.Request) -> web.Response:
                      ((auth_user(request) or {}).get("id"), listing_id))
     await db.commit()
     item = row_to_item(row, with_detail=True)
+    # bug #3: never expose the owner's Telegram id to anonymous callers. the frontend only needs to
+    # know "is this my listing" to show the Boost button, so compute that server-side as a boolean.
     cur = await db.execute("SELECT u.tg_id FROM listings l JOIN users u ON u.id = l.user_id WHERE l.id = ?",
                            (listing_id,))
-    item["owner_tg"] = (await cur.fetchone())["tg_id"]
+    owner_tg = (await cur.fetchone())["tg_id"]
+    viewer = auth_user(request) or {}
+    item["is_owner"] = bool(viewer.get("id")) and str(viewer.get("id")) == str(owner_tg)
     return web.json_response(item)
 
 

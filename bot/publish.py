@@ -63,7 +63,9 @@ async def to_channel(bot: Bot, row) -> list[int]:
     photos = db.listing_photos(row)[:MAX_PHOTOS]
     caption = render.listing_caption(row)
     if row["phone"]:
-        caption += f"\n\U0001F4DE {row['phone']}"
+        # the phone is free text typed by the owner; a stray < or & would break the whole HTML
+        # caption and the post would fail (bug #1). escape it like every other owner field.
+        caption += f"\n\U0001F4DE {render.esc(row['phone'])}"
     # reinforce the CTA keyboard in text: when a card is forwarded, the buttons can be cut off
     # on preview, but the caption always travels with the photo.
     if config.BOT_URL:

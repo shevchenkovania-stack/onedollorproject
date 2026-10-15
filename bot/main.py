@@ -4,7 +4,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import BotCommand
+from aiogram.types import BotCommand, BotCommandScopeChat
 
 import config
 import db
@@ -18,13 +18,20 @@ log = logging.getLogger("chiriebot")
 async def set_commands(bot: Bot) -> None:
     # the descriptions are the bot's storefront: Telegram shows them in the menu and they are the
     # only copy a user reads before deciding to tap, so they name the action, not the router.
-    await bot.set_my_commands([
+    default = [
         BotCommand(command="start", description="Главное меню"),
         BotCommand(command="search", description="Найти жильё в Кишинёве"),
         BotCommand(command="add", description="Подать объявление бесплатно"),
         BotCommand(command="menu", description="Меню"),
-        BotCommand(command="stats", description="Статистика (админ)"),
-    ])
+    ]
+    await bot.set_my_commands(default)
+    # bug #6: /stats is an admin command - show it only in each admin's own menu, not to everyone.
+    admin_cmds = default + [BotCommand(command="stats", description="Статистика (админ)")]
+    for chat_id in config.ADMIN_IDS:
+        try:
+            await bot.set_my_commands(admin_cmds, scope=BotCommandScopeChat(chat_id=chat_id))
+        except Exception:
+            log.warning("could not scope admin commands for %s", chat_id)
 
 
 async def main() -> None:
