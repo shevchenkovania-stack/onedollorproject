@@ -11,6 +11,7 @@ Run:  python tests/test_webapp.py        (exit 1 on any failure)
 import asyncio
 import hashlib
 import hmac
+import io
 import json
 import os
 import re
@@ -58,9 +59,9 @@ def test_routes_registered():
         assert need in paths, f"route {need} not registered"
     assert "index" in handlers and "api_listings" in handlers
     # phase B + C endpoints
-    for need in ("/api/my/listings", "/api/listing/{id}/action", "/api/listing"):
+    for need in ("/api/my/listings", "/api/listing/{id}/action", "/api/listing", "/api/listing/{id}/photos"):
         assert need in paths, f"route {need} not registered"
-    for h in ("api_my_listings", "api_listing_action", "api_create_listing"):
+    for h in ("api_my_listings", "api_listing_action", "api_create_listing", "api_upload_photos"):
         assert h in handlers, f"handler {h} not wired"
     print("PASS  test_routes_registered")
 
@@ -101,16 +102,22 @@ def _handler_body(src: str, name: str) -> str:
 
 class _FakeReq:
     """Minimal stand-in for aiohttp.web.Request: only what the handlers touch."""
-    def __init__(self, headers=None, app=None, match_info=None, body=None):
+    def __init__(self, headers=None, app=None, match_info=None, body=None, post=None):
         self.headers = headers or {}
         self.app = app or {}
         self.match_info = match_info or {}
         self._body = body
+        self._post = post
 
     async def json(self):
         if self._body is None:
             raise ValueError("no body")
         return self._body
+
+    async def post(self):
+        if self._post is None:
+            raise ValueError("no multipart")
+        return self._post
 
 
 def _signed_init_data(user_id: int, token: str) -> str:
@@ -232,6 +239,100 @@ async def _endpoint_tests():
             pass
 
 
+class _Multi:
+    """Fake aiohttp multipart result: getall('photos') -> list of FileField-like."""
+    def __init__(self, fields):
+        self._f = fields
+    def getall(self, name, default=None):
+        return list(self._f) if name == "photos" else (default or [])
+
+
+class _FileField:
+    def __init__(self, raw, content_type):
+        self.file = io.BytesIO(raw)
+        self.content_type = content_type
+
+
+def _tiny_jpeg():
+    from PIL import Image as _Img
+    buf = io.BytesIO()
+    _Img.new("RGB", (8, 8), (120, 180, 220)).save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+async def _photo_tests():
+    import aiosqlite
+    import app as webapp
+    import config
+    webapp.BOT_TOKEN = "test-token"
+    config.ADMIN_IDS = []
+
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    pdir = tempfile.mkdtemp()
+    webapp.PHOTOS_DIR = pdir
+    config.PHOTOS_DIR = pdir
+    conn = None
+    try:
+        conn = await aiosqlite.connect(path)
+        conn.row_factory = aiosqlite.Row
+        import db
+        await db.ensure_schema(conn)
+        await conn.execute("INSERT INTO users (tg_id, username, first_name) VALUES (111,'o','O')")
+        await conn.execute("INSERT INTO users (tg_id, username, first_name) VALUES (222,'s','S')")
+        await conn.execute(
+            "INSERT INTO listings (user_id, deal, ptype, price, currency, district, status, photos) "
+            "VALUES (1,'rent','apartment',500,'EUR','Centr','pending','[]')")
+        await conn.commit()
+        app = {"db": conn}
+        owner_hdr = {"X-Init-Data": _signed_init_data(111, "test-token")}
+        other_hdr = {"X-Init-Data": _signed_init_data(222, "test-token")}
+        jpg = _tiny_jpeg()
+
+        # 1. auth gate
+        st, _ = _jresp(await webapp.api_upload_photos(
+            _FakeReq(headers={}, app=app, match_info={"id": "1"}, post=_Multi([_FileField(jpg, "image/jpeg")]))))
+        assert st == 401, f"upload without auth should be 401, got {st}"
+        # 2. non-owner -> 403
+        st, _ = _jresp(await webapp.api_upload_photos(
+            _FakeReq(headers=other_hdr, app=app, match_info={"id": "1"}, post=_Multi([_FileField(jpg, "image/jpeg")]))))
+        assert st == 403, f"upload by non-owner should be 403, got {st}"
+        # 3. two valid images -> files on disk + photos column updated
+        st, data = _jresp(await webapp.api_upload_photos(
+            _FakeReq(headers=owner_hdr, app=app, match_info={"id": "1"},
+                     post=_Multi([_FileField(jpg, "image/jpeg"), _FileField(jpg, "image/jpeg")]))))
+        assert st == 200 and len(data["photos"]) == 2, (st, data)
+        assert os.path.isfile(os.path.join(pdir, "1_0.jpg")) and os.path.isfile(os.path.join(pdir, "1_1.jpg"))
+        cur = await conn.execute("SELECT photos FROM listings WHERE id=1")
+        stored = json.loads((await cur.fetchone())["photos"])
+        assert stored == ["1_0.jpg", "1_1.jpg"], stored
+        # 4. a non-image never gets written
+        before = sorted(os.listdir(pdir))
+        st, _ = _jresp(await webapp.api_upload_photos(
+            _FakeReq(headers=owner_hdr, app=app, match_info={"id": "1"},
+                     post=_Multi([_FileField(b"this is not a photo", "image/jpeg")]))))
+        assert st == 400, f"non-image upload should be 400, got {st}"
+        assert sorted(os.listdir(pdir)) == before, "invalid upload must not touch disk"
+        # 5. render.resolve_photo: a stored name -> FSInputFile, a file_id -> untouched
+        import render
+        from aiogram.types import FSInputFile
+        assert isinstance(render.resolve_photo("1_0.jpg"), FSInputFile)
+        assert render.resolve_photo("AgACAgQAAx...") == "AgACAgQAAx..."
+        print("PASS  test_endpoints_phase_d_photos")
+    finally:
+        if conn is not None:
+            try:
+                await conn.close()
+            except Exception:
+                pass
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        import shutil
+        shutil.rmtree(pdir, ignore_errors=True)
+
+
 if __name__ == "__main__":
     test_spa_tab_bar()
     test_routes_registered()
@@ -241,4 +342,8 @@ if __name__ == "__main__":
         asyncio.run(_endpoint_tests())
     except ModuleNotFoundError as e:
         print(f"SKIP  test_endpoints_phase_b ({e.name} not installed locally)")
+    try:
+        asyncio.run(_photo_tests())
+    except ModuleNotFoundError as e:
+        print(f"SKIP  test_endpoints_phase_d_photos ({e.name} not installed locally)")
     print("\nwebapp smoke passed")

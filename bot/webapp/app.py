@@ -6,6 +6,7 @@ DB access is read-only except view/contact counters and the card payment inbox
 """
 import hashlib
 import hmac
+import io
 import json
 import logging
 import os
@@ -17,6 +18,11 @@ import urllib.parse
 import aiosqlite
 import aiohttp
 from aiohttp import web
+
+try:  # Pillow is present on prod; used to verify + normalise uploads to JPEG. Optional in tests.
+    from PIL import Image
+except Exception:  # pragma: no cover
+    Image = None
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
@@ -390,6 +396,91 @@ async def api_create_listing(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "id": listing_id, "status": "pending"})
 
 
+# ---------- Phase D: photo upload for a listing (auth + owner, size/type limits) ----------
+
+MAX_PHOTOS = 10
+MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB per file
+_ALLOWED_TYPES = {"image/jpeg", "image/jpg", "image/pjpeg", "image/png"}
+
+
+def _normalize_image(raw: bytes, content_type: str):
+    """Return (ok, jpeg_bytes). Prefer Pillow (verify it is a real image + re-encode to JPEG,
+    which also strips EXIF/GPS - owners rarely mean to publish their geotag or phone model).
+    Without Pillow fall back to a magic-byte sniff so a non-image can never slip in."""
+    if not raw or len(raw) > MAX_PHOTO_BYTES:
+        return False, b""
+    if Image is not None:
+        try:
+            im = Image.open(io.BytesIO(raw))
+            im.verify()  # reject truncated / mislabelled files
+            im = Image.open(io.BytesIO(raw)).convert("RGB")
+            buf = io.BytesIO()
+            im.save(buf, format="JPEG", quality=85)
+            return True, buf.getvalue()
+        except Exception:
+            return False, b""
+    is_jpeg = raw[:3] == b"\xff\xd8\xff"
+    is_png = raw[:8] == b"\x89PNG\r\n\x1a\n"
+    if is_jpeg or is_png:
+        return True, raw
+    return False, b""
+
+
+async def api_upload_photos(request: web.Request) -> web.Response:
+    """Attach up to 10 photos to the owner's own listing. Files are written by us as
+    {listing_id}_{i}.jpg - the client never chooses the name, so there is no path traversal."""
+    viewer = auth_user(request)
+    if not viewer:
+        return web.json_response({"error": "auth_required"}, status=401)
+    listing_id = int(request.match_info["id"])
+    conn = request.app["db"]
+    cur = await conn.execute(
+        "SELECT l.user_id, u.tg_id FROM listings l JOIN users u ON u.id = l.user_id WHERE l.id = ?",
+        (listing_id,))
+    row = await cur.fetchone()
+    if not row:
+        return web.json_response({"error": "not_found"}, status=404)
+    if str(row["tg_id"]) != str(viewer["id"]):
+        return web.json_response({"error": "not_owner"}, status=403)
+
+    try:
+        data = await request.post()
+    except Exception:
+        return web.json_response({"error": "bad_multipart"}, status=400)
+    # a real aiohttp MultiDictProxy; tests pass a plain dict-like with getall().
+    fields = data.getall("photos", []) if hasattr(data, "getall") else data.get("photos", [])
+    if not isinstance(fields, list):
+        fields = [fields]
+    files = [f for f in fields if hasattr(f, "file") and hasattr(f.file, "read")][:MAX_PHOTOS]
+    if not files:
+        return web.json_response({"error": "no_files"}, status=400)
+
+    names = []
+    for f in files:
+        try:
+            raw = f.file.read()
+        except Exception:
+            continue
+        ok, blob = _normalize_image(raw, getattr(f, "content_type", ""))
+        if not ok:
+            continue
+        name = f"{listing_id}_{len(names)}.jpg"
+        os.makedirs(PHOTOS_DIR, exist_ok=True)
+        try:
+            with open(os.path.join(PHOTOS_DIR, name), "wb") as fh:
+                fh.write(blob)
+        except OSError:
+            continue
+        names.append(name)
+    if not names:
+        return web.json_response({"error": "no_valid_images"}, status=400)
+    await conn.execute(
+        "UPDATE listings SET photos = ?, updated_at = datetime('now') WHERE id = ?",
+        (json.dumps(names), listing_id))
+    await conn.commit()
+    return web.json_response({"ok": True, "id": listing_id, "photos": [f"/photos/{n}" for n in names]})
+
+
 async def webhook_lemonsqueezy(request: web.Request) -> web.Response:
     """Card payment inbox. No init-data auth: the HMAC signature of the raw body is the proof.
 
@@ -431,6 +522,7 @@ async def app_factory() -> web.Application:
     app.router.add_get("/api/my/listings", api_my_listings)
     app.router.add_post("/api/listing/{id}/action", api_listing_action)
     app.router.add_post("/api/listing", api_create_listing)
+    app.router.add_post("/api/listing/{id}/photos", api_upload_photos)
     app.router.add_post("/webhook/lemonsqueezy", webhook_lemonsqueezy)
     os.makedirs(PHOTOS_DIR, exist_ok=True)
     app.router.add_static("/photos/", PHOTOS_DIR)

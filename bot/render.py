@@ -1,7 +1,9 @@
 import html
+import os
 
-from aiogram.types import InputMediaPhoto
+from aiogram.types import FSInputFile, InputMediaPhoto
 
+import config
 import db
 import keyboards
 from constants import DEAL_LABELS, PTYPE_LABELS, STATUS_LABELS
@@ -9,6 +11,19 @@ from constants import DEAL_LABELS, PTYPE_LABELS, STATUS_LABELS
 
 def esc(v) -> str:
     return html.escape(str(v)) if v is not None else ""
+
+
+def resolve_photo(value):
+    """A listing photo can be a Telegram file_id (from the bot wizard) or a local file name /
+    absolute path (uploaded through the Mini App, Phase D). aiogram only uploads a real file
+    when handed an InputFile, so wrap anything that resolves to a file on disk; pass the rest
+    (file_id / URL) straight through."""
+    if not isinstance(value, str):
+        return value
+    cand = value if os.path.isabs(value) else os.path.join(config.PHOTOS_DIR, value)
+    if os.path.isfile(cand):
+        return FSInputFile(cand)
+    return value
 
 
 def hashtags(row) -> str:
@@ -58,10 +73,11 @@ async def send_listing(bot, chat_id: int, row, owner: bool = False, with_keyboar
     if photos:
         media = []
         for i, p in enumerate(photos[:10]):
+            src = resolve_photo(p)
             if i == 0:
-                media.append(InputMediaPhoto(media=p, caption=caption, parse_mode="HTML"))
+                media.append(InputMediaPhoto(media=src, caption=caption, parse_mode="HTML"))
             else:
-                media.append(InputMediaPhoto(media=p))
+                media.append(InputMediaPhoto(media=src))
         await bot.send_media_group(chat_id, media)
         if kb:
             await bot.send_message(chat_id, "\u2b07\uFE0F", reply_markup=kb)

@@ -76,7 +76,7 @@ async def to_channel(bot: Bot, row) -> list[int]:
                   for i in range(min(len(photos), MAX_PHOTOS))
                   if os.path.exists(os.path.join(config.PHOTOS_DIR, f"{row['id']}_{i}.jpg"))]
     if web_photos:
-        media = [InputMediaPhoto(media=p, caption=caption if i == 0 else None, parse_mode="HTML")
+        media = [InputMediaPhoto(media=render.resolve_photo(p), caption=caption if i == 0 else None, parse_mode="HTML")
                  for i, p in enumerate(web_photos)]
         sent = await bot.send_media_group(config.CHANNEL_ID, media)
         msg = await bot.send_message(config.CHANNEL_ID, "↑ контакты и детали ниже", reply_markup=kb)
