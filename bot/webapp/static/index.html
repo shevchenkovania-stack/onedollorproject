@@ -20,7 +20,7 @@
   --radius: 16px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-body { background: var(--bg); color: var(--text); font: 15px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif; padding-bottom: 24px; }
+body { background: var(--bg); color: var(--text); font: 15px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif; padding-bottom: 84px; }
 header { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(180%) blur(10px); padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand .logo { width: 34px; height: 34px; border-radius: 9px; flex: 0 0 auto; box-shadow: var(--shadow); }
@@ -73,9 +73,22 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-ra
 .contacts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .contactlink { display: inline-flex; align-items: center; padding: 9px 14px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--text); text-decoration: none; font-size: 13px; font-weight: 600; }
 .contactlink:active { transform: scale(.97); }
+/* bottom tab bar: the app is one window - search / submit / my */
+.tabs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; display: flex; background: var(--bg); border-top: 1px solid var(--line); padding: 6px 0 max(6px, env(safe-area-inset-bottom)); }
+.tab { flex: 1; border: none; background: none; color: var(--hint); font-size: 11px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; padding: 6px 0; font-family: inherit; }
+.tab .ic { font-size: 20px; line-height: 1; }
+.tab.on { color: var(--brand); }
+.view { display: none; }
+.view.on { display: block; }
+.stub { padding: 46px 26px; text-align: center; }
+.stub .stubic { font-size: 46px; margin-bottom: 12px; }
+.stub b { display: block; font-size: 19px; margin-bottom: 8px; }
+.stub p { color: var(--hint); font-size: 14px; line-height: 1.5; max-width: 300px; margin: 0 auto 18px; }
+.stub .btn { max-width: 320px; margin: 0 auto; }
 </style>
 </head>
 <body>
+<div class="view on" id="viewSearch">
 <header>
   <div class="brand">
     <svg class="logo" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Găsește Casa">
@@ -119,6 +132,31 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-ra
 </div>
 <button class="btn sec" id="more" style="display:none; margin:0 16px">Показать ещё</button>
 <div class="footer">Găsește Casa · аренда и продажа · без комиссии · контакт всегда на карточке<br><span onclick="toBot('add')" style="text-decoration:underline;cursor:pointer">➕ Добавить своё объявление бесплатно →</span></div>
+</div><!-- /viewSearch -->
+
+<div class="view" id="viewSubmit">
+  <div class="stub">
+    <div class="stubic">➕</div>
+    <b>Подать объявление</b>
+    <p>Оформишь объект в пару шагов — бесплатно. Пока подача открыта в боте.</p>
+    <button class="btn" onclick="toBot('add')">➕ Открыть подачу в боте</button>
+  </div>
+</div>
+
+<div class="view" id="viewMy">
+  <div class="stub">
+    <div class="stubic">📋</div>
+    <b>Мои объявления</b>
+    <p>Здесь появятся твои объекты, их статус и кнопки Сдано / Продлить / Удалить.</p>
+    <button class="btn" onclick="toBot('my')">📋 Открыть в боте</button>
+  </div>
+</div>
+
+<nav class="tabs">
+  <button class="tab on" id="tabSearch" onclick="showView('search')"><span class="ic">🔍</span>Поиск</button>
+  <button class="tab" id="tabSubmit" onclick="showView('submit')"><span class="ic">➕</span>Подать</button>
+  <button class="tab" id="tabMy" onclick="showView('my')"><span class="ic">📋</span>Мои</button>
+</nav>
 
 <div class="sheet" id="sheet">
   <div class="top"><button class="back" onclick="closeSheet()">←</button> <b id="sheetTitle">Объявление</b></div>
@@ -173,6 +211,19 @@ async function load(append=false) {
   } catch(e) { $("empty").style.display="block"; }
   const s = await api("/api/stats").catch(()=>({active:0}));
   $("count").textContent = s.active ? s.active+" объявл." : "";
+}
+
+// bottom tab navigation: one app window, three views. search is native; submit/my are
+// handed to the bot until Phase B (Мои) and Phase C (Подать) make them native here.
+const _VIEWS = { search: "viewSearch", submit: "viewSubmit", my: "viewMy" };
+const _TABS = { search: "tabSearch", submit: "tabSubmit", my: "tabMy" };
+function showView(name) {
+  if (!_VIEWS[name]) name = "search";
+  for (const [k, id] of Object.entries(_VIEWS)) $(id).classList.toggle("on", k === name);
+  for (const [k, id] of Object.entries(_TABS)) $(id).classList.toggle("on", k === name);
+  if (name === "my" && window.renderMy) window.renderMy();
+  if (name === "submit" && window.onEnterSubmit) window.onEnterSubmit();
+  window.scrollTo(0, 0);
 }
 
 function toBot(startParam) {

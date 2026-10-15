@@ -9,6 +9,7 @@ import keyboards
 import render
 from handlers import add as add_h
 from handlers import boost as boost_h
+from handlers import profile as profile_h
 
 router = Router()
 
@@ -56,6 +57,11 @@ async def cmd_start_deep(message: Message, state: FSMContext) -> None:
                 await render.send_listing(message.bot, message.chat.id, row, owner=False)
     if payload == "add":
         await add_h.begin(message, state)
+        return
+    if payload == "my":
+        # Phase A of the Mini App plan: the app's «Мои» tab sends the user here until Phase B
+        # makes it native inside the app.
+        await profile_h.render_my_listings(message, message.from_user)
         return
     if payload.startswith("boost_"):
         try:
