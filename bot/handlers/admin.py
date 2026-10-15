@@ -37,7 +37,11 @@ async def moderate(cb: CallbackQuery, bot: Bot) -> None:
         await cb.message.answer(f"Уже обработано (статус: {row['status']}).")
         return
     status = "active" if action == "approve" else "rejected"
-    await db.set_listing_status(listing_id, status)
+    if status == "active":
+        # Stage 4: an approved ad goes live with a real end date, not forever.
+        await db.activate_listing(listing_id, config.LISTING_DAYS)
+    else:
+        await db.set_listing_status(listing_id, status)
     await db.log_event(f"moderation_{action}", listing_id=listing_id)
     await cb.message.edit_reply_markup(reply_markup=None)
     await cb.message.answer(f"Объявление #{listing_id}: <b>{status}</b>", parse_mode="HTML")

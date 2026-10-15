@@ -62,6 +62,14 @@ def listing_kb(listing_id: int, owner: bool, boosted: bool,
     share = share_url(listing_id)
     if share:
         rows.append([InlineKeyboardButton(text="\U0001F4E4 Поделиться объектом", url=share)])
+    if owner:
+        # Stage 4: the owner can close out their own ad - sold / extend / delete (all reversible
+        # via Продлить, since archiving only takes it off the board and keeps the row).
+        rows.append([
+            InlineKeyboardButton(text="\u2705 Сдано", callback_data=f"sold:{listing_id}"),
+            InlineKeyboardButton(text="\U0001F501 Продлить", callback_data=f"extend:{listing_id}"),
+            InlineKeyboardButton(text="\U0001F5D1 Удалить", callback_data=f"delete:{listing_id}"),
+        ])
     if not owner:
         # every opened card is a recruitment moment: a viewer who is looking at someone
         # else's listing is one tap from being an owner. Put the pitch right before they

@@ -38,7 +38,9 @@ CREATE TABLE IF NOT EXISTS listings (
     contacts TEXT DEFAULT NULL,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now')),
-    views INTEGER DEFAULT 0
+    views INTEGER DEFAULT 0,
+    -- Stage 4: when this active ad leaves the board on its own (set on approval)
+    expires_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_listings_status ON listings(status);
@@ -125,6 +127,9 @@ async def _migrate() -> None:
     if "contacts" not in cols:
         # owner-set public channels: JSON {telegram, instagram, whatsapp, viber, facebook, site}
         await _conn.execute("ALTER TABLE listings ADD COLUMN contacts TEXT DEFAULT NULL")
+    if "expires_at" not in cols:
+        # Stage 4: ads leave the board on their own date instead of living forever
+        await _conn.execute("ALTER TABLE listings ADD COLUMN expires_at TEXT")
     cur = await _conn.execute("PRAGMA table_info(payments)")
     cols = {r["name"] for r in await cur.fetchall()}
     if "amount" not in cols:
@@ -163,6 +168,8 @@ async def ensure_schema(conn: aiosqlite.Connection) -> None:
     cols = {r["name"] for r in await cur.fetchall()}
     if "contacts" not in cols:
         await conn.execute("ALTER TABLE listings ADD COLUMN contacts TEXT DEFAULT NULL")
+    if "expires_at" not in cols:
+        await conn.execute("ALTER TABLE listings ADD COLUMN expires_at TEXT")
     await conn.commit()
 
 
@@ -242,6 +249,64 @@ async def set_listing_status(listing_id: int, status: str) -> None:
     await db.commit()
 
 
+# --- Stage 4: listing life cycle -------------------------------------------------
+
+async def activate_listing(listing_id: int, days: int) -> None:
+    """Approve onto the board with a real end date. A fresh active ad lives `days` days."""
+    db = _db()
+    await db.execute(
+        "UPDATE listings SET status = 'active', "
+        "expires_at = datetime('now', ?), updated_at = datetime('now') WHERE id = ?",
+        (f"+{int(days)} days", listing_id),
+    )
+    await db.commit()
+
+
+async def extend_listing(listing_id: int, days: int) -> None:
+    """Продлить: push the end date out from now and make sure the ad is live again
+    (so a sold/archived one can be revived with the same one tap the reminder offers)."""
+    db = _db()
+    await db.execute(
+        "UPDATE listings SET status = 'active', "
+        "expires_at = datetime('now', ?), updated_at = datetime('now') WHERE id = ?",
+        (f"+{int(days)} days", listing_id),
+    )
+    await db.commit()
+
+
+async def archive_listing(listing_id: int) -> None:
+    """Сдано / Удалить: leave the board but keep the row (soft, reversible via extend)."""
+    await set_listing_status(listing_id, "archived")
+
+
+async def archive_expired(limit: int = 200):
+    """The hourly archiver: active ads whose end date has passed become archived.
+    Returns the rows we archived so the caller can tell their owners."""
+    db = _db()
+    cur = await db.execute(
+        "SELECT * FROM listings WHERE status = 'active' "
+        "AND expires_at IS NOT NULL AND expires_at <= datetime('now') ORDER BY id LIMIT ?",
+        (limit,))
+    rows = await cur.fetchall()
+    for r in rows:
+        await db.execute(
+            "UPDATE listings SET status = 'archived', updated_at = datetime('now') WHERE id = ?",
+            (r["id"],))
+    await db.commit()
+    return rows
+
+
+async def listings_expiring_in(days: int, limit: int = 200):
+    """Active ads that will leave the board within `days` - the extend-reminder feed."""
+    cur = await _db().execute(
+        "SELECT l.*, u.tg_id FROM listings l JOIN users u ON u.id = l.user_id "
+        "WHERE l.status = 'active' AND l.expires_at IS NOT NULL "
+        "AND l.expires_at > datetime('now') AND l.expires_at <= datetime('now', ?) "
+        "ORDER BY l.expires_at LIMIT ?",
+        (f"+{int(days)} days", limit))
+    return await cur.fetchall()
+
+
 def listing_photos(row) -> list[str]:
     try:
         return json.loads(row["photos"] or "[]")
@@ -300,7 +365,7 @@ async def search_listings(
     limit: int = 10,
     offset: int = 0,
 ):
-    q = "SELECT * FROM listings WHERE status = 'active'"
+    q = "SELECT * FROM listings WHERE status = 'active' AND (expires_at IS NULL OR expires_at > datetime('now'))"
     args: list[Any] = []
     if deal:
         q += " AND deal = ?"
@@ -331,7 +396,7 @@ async def count_search_listings(
     rooms: int | None = None,
     price_max: int | None = None,
 ) -> int:
-    q = "SELECT COUNT(*) c FROM listings WHERE status = 'active'"
+    q = "SELECT COUNT(*) c FROM listings WHERE status = 'active' AND (expires_at IS NULL OR expires_at > datetime('now'))"
     args: list[Any] = []
     if deal:
         q += " AND deal = ?"

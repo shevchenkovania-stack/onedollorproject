@@ -25,6 +25,12 @@ DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", "EUR")
 BOOST_STARS = int(os.getenv("BOOST_STARS", "400"))
 BOOST_DAYS = int(os.getenv("BOOST_DAYS", "7"))
 
+# Listing life cycle (Stage 4): a live ad is automatically archived after LISTING_DAYS so the
+# board shows real supply, not year-old listings. The owner gets a warning EXPIRE_REMINDER_DAYS
+# before and can extend with one tap. 0 would mean "never expire" - we keep a real window.
+LISTING_DAYS = int(os.getenv("LISTING_DAYS", "30"))
+EXPIRE_REMINDER_DAYS = int(os.getenv("EXPIRE_REMINDER_DAYS", "5"))
+
 # Alternative payment rail: instant transfer in MDL, confirmed by a human admin.
 # In Moldova this is MIA (Schemele Naționale de Plăți Instant, BNM): a P2P transfer to a phone
 # number inside any banking app — no card data entry, no 3-D Secure, no acquiring contract,

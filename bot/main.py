@@ -8,6 +8,7 @@ from aiogram.types import BotCommand, BotCommandScopeChat
 
 import config
 import db
+import jobs
 import scheduler
 from handlers import add, admin, boost, browse, fallback, profile, start
 
@@ -69,13 +70,18 @@ async def main() -> None:
                 pass
 
     job = None
+    lifecycle = None
     try:
         await bot.delete_webhook(drop_pending_updates=True)
         job = asyncio.create_task(scheduler.run(bot))
+        # Stage 4: archive expired ads + remind owners before they expire
+        lifecycle = asyncio.create_task(jobs.run(bot))
         await dp.start_polling(bot)
     finally:
         if job is not None:
             job.cancel()
+        if lifecycle is not None:
+            lifecycle.cancel()
         await db.close_db()
         await bot.session.close()
 
