@@ -44,7 +44,10 @@ async def offer_flow(target: Message, from_user, listing_id: int) -> None:
         note += ("\n\nКартой — оплата на защищённой странице банка, Boost включается сам, "
                  "подтверждение менеджером не нужно.")
     if credits > 0:
-        note = (f"\n\n\U0001F381 У тебя есть <b>{credits}</b> подарочных поднятий — "
+        phrase = "подарочное поднятие" if credits % 10 == 1 and credits % 100 != 11 else (
+            "подарочных поднятия" if 2 <= credits % 10 <= 4 and not 12 <= credits % 100 <= 14
+            else "подарочных поднятий")
+        note = (f"\n\n\U0001F381 У тебя <b>{credits}</b> {phrase} — "
                 "жми «Поднять бесплатно»." + note)
     text = (
         f"\U0001F680 <b>Boost объявления #{listing_id}</b>\n\n"
@@ -69,7 +72,7 @@ async def gift_raise(cb: CallbackQuery, bot: Bot) -> None:
         await cb.message.answer("Поднять можно только своё объявление.")
         return
     if not await db.spend_gift_credit(user["id"]):
-        await cb.message.answer("Подарочные поднятия закончились \U0001F625 Дальше — Boost за 100 MDL или Stars.")
+        await cb.message.answer(f"Подарочных поднятий больше нет. Boost — {keyboards.rails_line()}.")
         return
     await db.boost_listing(listing_id, config.BOOST_DAYS)
     await db.log_boost(listing_id, user["id"], 0, config.BOOST_DAYS, status="gift")

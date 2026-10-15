@@ -1,0 +1,164 @@
+{
+  "_comment": "10 fake Chișinău one-room listings. Fields mirror db.create_listing(...). Put matching photos in deploy/test_data/images/ named as in photos[]. Then run: powershell -File deploy\\run.ps1 deploy\\test_data\\seed_test_data.py 'python /tmp/seed_test_data.py' -RemoteDir /tmp",
+  "listings": [
+    {
+      "slug": "01_buiucani_pZadnipru_300",
+      "deal": "rent", "ptype": "apartment", "rooms": 1,
+      "price": 300, "currency": "EUR",
+      "district": "Буюканы",
+      "area": 32, "floor": 3, "floors": 5,
+      "phone": "+373 60 123 401",
+      "description": "str. Petru Zadnipru 4 · карта: https://maps.app.goo.gl/test01\n1 ком · 3/5 эт · 32 м² · кирпичный дом\nСвободна с 1 ноября\n300€ от 6 мес · 340€ от 3 мес",
+      "features": ["📶 Интернет", "🧺 Стиральная", "🛋 С мебелью"],
+      "contacts": {
+        "telegram": "@case_buiucani",
+        "whatsapp": "+37360123401"
+      },
+      "photos": ["01_a.jpg", "01_b.jpg"]
+    },
+    {
+      "slug": "02_botanica_tirigul_380",
+      "deal": "rent", "ptype": "apartment", "rooms": 1,
+      "price": 380, "currency": "EUR",
+      "district": "Ботаника",
+      "area": 38, "floor": 5, "floors": 9,
+      "phone": "+373 60 123 402",
+      "description": "str. Tirigul 12 · карта: https://maps.app.goo.gl/test02\n1 ком · 5/9 эт · 38 м² · свежий ремонт\nСвободна сейчас\n380€ от 6 мес · 420€ от 3 мес",
+      "features": ["❄️ Кондиционер", "📶 Интернет", "🍽 Посудомойка", "🛋 С мебелью", "🚗 Парковка"],
+      "contacts": {
+        "telegram": "@botanica_rent",
+        "instagram": "@botanica_rent",
+        "whatsapp": "+37360123402"
+      },
+      "photos": ["02_a.jpg", "02_b.jpg", "02_c.jpg"]
+    },
+    {
+      "slug": "03_centru_stefan_450",
+      "deal": "rent", "ptype": "apartment", "rooms": 1,
+      "price": 450, "currency": "EUR",
+      "district": "Центр",
+      "area": 28, "floor": 7, "floors": 12,
+      "phone": "+373 60 123 403",
+      "description": "bd. Ștefan cel Mare 45 · карта: https://maps.app.goo.gl/test03\nстудия · living-зона · 7/12 эт · новострой\nСвободна с 15 октября\n450€ от 3 мес · 500€ от 1 мес",
+      "features": ["🆕 Новостройка", "❄️ Кондиционер", "📶 Интернет", "🍽 Посудомойка", "🛗 Лифт", "👶 Дети ок"],
+      "contacts": {
+        "telegram": "t.me/studio_centru_md",
+        "instagram": "studio_centru_md",
+        "whatsapp": "+37360123403",
+        "site": "studio-centru.md"
+      },
+      "photos": ["03_a.jpg", "03_b.jpg", "03_c.jpg"]
+    },
+    {
+      "slug": "04_riscani_columna_270",
+      "deal": "rent", "ptype": "apartment", "rooms": 1,
+      "price": 270, "currency": "EUR",
+      "district": "Рышкановка",
+      "area": 30, "floor": 2, "floors": 4,
+      "phone": "+373 60 123 404",
+      "description": "str. Columna 8\n1 ком · 2/4 эт · 30 м² · без ремонта, но чисто\nСвободна сейчас\n270€ от 12 мес",
+      "features": ["📶 Интернет", "🔥 Автономка"],
+      "contacts": {
+        "telegram": "@gazda_riscani",
+        "whatsapp": "+37360123404"
+      },
+      "photos": ["04_a.jpg"]
+    },
+    {
+      "slug": "05_ciocana_parten_320",
+      "deal": "rent", "ptype": "apartment", "rooms": 1,
+      "price": 320, "currency": "EUR",
+      "district": "Чеканы",
+      "area": 35, "floor": 4, "floors": 9,
+      "phone": "+373 60 123 405",
+      "description": "str. Parten 3 (панель 9 эт, новый блок)\n1 ком · 4/9 эт · 35 м² · мебель + техника\nСвободна с 1 декабря\n320€ от 6 мес",
+      "features": ["🛋 С мебелью", "🧺 Стиральная", "❄️ Кондиционер", "📶 Интернет", "🐾 Животные ок"],
+      "contacts": {
+        "telegram": "@ciocana_apart",
+        "whatsapp": "+37360123405",
+        "facebook": "ciocana.apart"
+      },
+      "photos": ["05_a.jpg", "05_b.jpg"]
+    },
+    {
+      "slug": "06_cada_balcony_340",
+      "deal": "rent", "ptype": "apartment", "rooms": 1,
+      "price": 340, "currency": "EUR",
+      "district": "Кодры",
+      "area": 40, "floor": 6, "floors": 9,
+      "phone": "+373 60 123 406",
+      "description": "str. Codrului 5\n1 ком с балконом · 6/9 эт · 40 м²\nСвободна сейчас\n340€ от 3 мес · 380€ от 1 мес",
+      "features": ["🏖 Балкон", "📶 Интернет", "🛋 С мебелью", "🧺 Стиральная", "👶 Дети ок"],
+      "contacts": {
+        "telegram": "@oda_cada",
+        "instagram": "@oda_cada_md",
+        "whatsapp": "+37360123406"
+      },
+      "photos": ["06_a.jpg", "06_b.jpg"]
+    },
+    {
+      "slug": "07_buiucani_utila_400",
+      "deal": "rent", "ptype": "apartment", "rooms": 1,
+      "price": 400, "currency": "EUR",
+      "district": "Буюканы",
+      "area": 33, "floor": 8, "floors": 16,
+      "phone": "+373 60 123 407",
+      "description": "bd. Dacia 60 · карта: https://maps.app.goo.gl/test07\nutila-формат · 8/16 эт · 33 м² · новострой\nСвободна с 20 октября\n400€ от 3 мес · 460€ от 1 мес",
+      "features": ["🆕 Новостройка", "📶 Интернет", "🍽 Посудомойка", "🛗 Лифт", "🚗 Парковка"],
+      "contacts": {
+        "telegram": "@utila_dacia",
+        "whatsapp": "+37360123407",
+        "site": "https://utila-dacia.md"
+      },
+      "photos": ["07_a.jpg", "07_b.jpg"]
+    },
+    {
+      "slug": "08_botanica_teilor_42000",
+      "deal": "sale", "ptype": "apartment", "rooms": 1,
+      "price": 42000, "currency": "EUR",
+      "district": "Ботаника",
+      "area": 40, "floor": 5, "floors": 9,
+      "phone": "+373 60 123 408",
+      "description": "str. Teilor 15 · Ботаника\n1 ком · 5/9 эт · 40 м² · кирпич, свежий ремонт\nЧастный собственник, документы готовы",
+      "features": ["🆕 Новостройка", "❄️ Кондиционер", "📶 Интернет", "🛋 С мебелью", "🚗 Парковка"],
+      "contacts": {
+        "telegram": "@vladimiresc",
+        "whatsapp": "+37360123408"
+      },
+      "photos": ["08_a.jpg", "08_b.jpg", "08_c.jpg"]
+    },
+    {
+      "slug": "09_centru_alecsandri_38000",
+      "deal": "sale", "ptype": "apartment", "rooms": 1,
+      "price": 38000, "currency": "EUR",
+      "district": "Центр",
+      "area": 32, "floor": 2, "floors": 5,
+      "phone": "+373 60 123 409",
+      "description": "str. Alecsandri 22 · Центр, старый фонд\n1 ком · 2/5 эт · 32 м² · высокие потолки 3.2 м\nПод реновацию, идеальный вариант под сдачу",
+      "features": ["🏖 Балкон"],
+      "contacts": {
+        "telegram": "@centru_house",
+        "whatsapp": "+37360123409",
+        "instagram": "@centru_house_md"
+      },
+      "photos": ["09_a.jpg", "09_b.jpg"]
+    },
+    {
+      "slug": "10_riscani_bucuresti_55000",
+      "deal": "sale", "ptype": "apartment", "rooms": 1,
+      "price": 55000, "currency": "EUR",
+      "district": "Рышкановка",
+      "area": 45, "floor": 8, "floors": 12,
+      "phone": "+373 60 123 410",
+      "description": "str. București 12 · новый блок 2024\n1 ком · 8/12 эт · 45 м² · панорамное окно\nСдано, документы на сделке. Ипотека возможна.",
+      "features": ["🆕 Новостройка", "🛗 Лифт", "🚗 Парковка", "📶 Интернет", "❄️ Кондиционер"],
+      "contacts": {
+        "telegram": "t.me/realtor_viorica",
+        "whatsapp": "+37360123410",
+        "facebook": "viorica.realtor.md",
+        "site": "https://case-viorica.md"
+      },
+      "photos": ["10_a.jpg", "10_b.jpg", "10_c.jpg"]
+    }
+  ]
+}

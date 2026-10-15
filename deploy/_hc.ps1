@@ -1,0 +1,6 @@
+param([string]$Path)
+$text = [IO.File]::ReadAllText($Path)
+$lf = $text.Replace("`r`n", "`n")
+$bytes = [Text.Encoding]::UTF8.GetBytes($lf)
+$md5 = [Security.Cryptography.MD5]::Create()
+(($md5.ComputeHash($bytes) | ForEach-Object { $_.ToString("x2") }) -join "")

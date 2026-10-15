@@ -46,9 +46,11 @@ async def moderate(cb: CallbackQuery, bot: Bot) -> None:
             # founders gift: the first GIFT_SLOTS publishers get free raises - this is the
             # headline of every outreach message, so it must arrive automatically, not by hand
             if await db.grant_gift_credits(row["user_id"], config.GIFT_BOOSTS, config.GIFT_SLOTS):
-                note += (f"\n\n\U0001F381 Ты в первых {config.GIFT_SLOTS}: лови <b>{config.GIFT_BOOSTS} "
-                         f"подарочных поднятий</b> в топ — кнопка «\U0001F381 Поднять бесплатно» у каждого "
-                         "своего объявления, без денег.")
+                n = config.GIFT_BOOSTS
+                word = "поднятие" if n % 10 == 1 and n % 100 != 11 else (
+                    "поднятия" if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else "поднятий")
+                note += (f"\n\n\U0001F381 Ты в первых {config.GIFT_SLOTS}: лови <b>{n} {word}</b> "
+                         "в топ — кнопка «\U0001F381 Поднять бесплатно» у твоего объявления, без денег.")
         else:
             note = f"\u274C Твоё объявление <b>#{listing_id}</b> отклонено модератором."
         try:

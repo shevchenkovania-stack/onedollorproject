@@ -3,45 +3,57 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>Găsește Casa · Доска объявлений</title>
+<title>Găsește Casa · Аренда квартир и продажа в Кишинёве · Chirie Chișinău · без комиссии</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
 :root {
   --bg: var(--tg-theme-bg-color, #ffffff);
-  --text: var(--tg-theme-text-color, #222);
-  --hint: var(--tg-theme-hint-color, #999);
-  --accent: var(--tg-theme-button-color, #3fa46a);
+  --text: var(--tg-theme-text-color, #1b2733);
+  --hint: var(--tg-theme-hint-color, #8a97a5);
+  --brand: #0f9d8f;
+  --brand-dark: #0a6e63;
+  --accent: var(--tg-theme-button-color, var(--brand));
   --accent-text: var(--tg-theme-button-text-color, #fff);
-  --card: var(--tg-theme-secondary-bg-color, #f2f2f7);
-  --radius: 14px;
+  --card: var(--tg-theme-secondary-bg-color, #f4f6f8);
+  --line: rgba(27, 39, 51, .08);
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 8px 24px rgba(16, 24, 40, .08);
+  --radius: 16px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-body { background: var(--bg); color: var(--text); font: 15px/1.4 -apple-system, "Segoe UI", Roboto, sans-serif; padding-bottom: 24px; }
-header { position: sticky; top: 0; z-index: 20; background: var(--bg); padding: 10px 14px 6px; box-shadow: 0 2px 6px rgba(0,0,0,.06); }
-h1 { font-size: 18px; display: flex; align-items: center; gap: 8px; }
-h1 .count { font-size: 12px; color: var(--hint); font-weight: 400; margin-left: auto; }
-h1 .tag { font-size: 11px; font-weight: 500; color: var(--hint); border: 1px solid var(--card); border-radius: 8px; padding: 2px 7px; margin-left: 2px; }
-.filters { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-.chips { display: flex; gap: 8px; overflow-x: auto; }
-.chip { flex: 0 0 auto; padding: 7px 14px; border-radius: 20px; background: var(--card); color: var(--text); border: none; font-size: 13px; cursor: pointer; }
-.chip.on { background: var(--accent); color: var(--accent-text); }
-select, input[type=number] { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--card); background: var(--bg); color: var(--text); font-size: 14px; }
+body { background: var(--bg); color: var(--text); font: 15px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif; padding-bottom: 24px; }
+header { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(180%) blur(10px); padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand .logo { width: 34px; height: 34px; border-radius: 9px; flex: 0 0 auto; box-shadow: var(--shadow); }
+h1 { font-size: 18px; font-weight: 700; letter-spacing: -.2px; display: flex; align-items: center; gap: 8px; }
+h1 .count { font-size: 12px; color: var(--hint); font-weight: 500; margin-left: auto; }
+h1 .tag { font-size: 11px; font-weight: 600; color: var(--brand-dark); background: color-mix(in srgb, var(--brand) 12%, transparent); border-radius: 999px; padding: 3px 9px; }
+.filters { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: 0 0 auto; padding: 8px 15px; border-radius: 999px; background: var(--card); color: var(--text); border: 1px solid var(--line); font-size: 13px; font-weight: 500; cursor: pointer; transition: .15s; }
+.chip.on { background: var(--brand); color: #fff; border-color: transparent; box-shadow: 0 2px 8px color-mix(in srgb, var(--brand) 40%, transparent); }
+select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 11px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font-size: 14px; }
+.addcta { display: block; width: 100%; margin-top: 10px; padding: 10px 14px; border-radius: 11px; background: var(--brand); color: #fff; border: none; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px color-mix(in srgb, var(--brand) 30%, transparent); }
 .row { display: flex; gap: 8px; flex-wrap: wrap; }
-.grid { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; }
-.card { background: var(--card); border-radius: var(--radius); overflow: hidden; cursor: pointer; position: relative; }
-.card img { width: 100%; height: 190px; object-fit: cover; display: block; }
-.card .noimg { width: 100%; height: 110px; display: flex; align-items: center; justify-content: center; color: var(--hint); font-size: 30px; }
-.card .body { padding: 10px 12px 12px; }
-.price { font-size: 18px; font-weight: 700; }
-.price small { font-size: 12px; font-weight: 400; color: var(--hint); }
-.meta { font-size: 13px; color: var(--hint); margin-top: 2px; }
-.badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 6px; }
-.badge { font-size: 11px; padding: 3px 8px; border-radius: 8px; background: rgba(0,0,0,.55); color: #fff; }
-.badge.boost { background: #f5a623; color: #fff; }
-.empty { text-align: center; color: var(--hint); padding: 40px 20px; }
-.empty b { display: block; margin-bottom: 10px; color: var(--text); }
-.btn { display: block; width: 100%; padding: 13px; border: none; border-radius: 12px; background: var(--accent); color: var(--accent-text); font-size: 15px; font-weight: 600; cursor: pointer; text-align: center; }
+.grid { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px; }
+.card { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; cursor: pointer; position: relative; box-shadow: var(--shadow); transition: transform .12s; }
+.card:active { transform: scale(.99); }
+.card img { width: 100%; height: 200px; object-fit: cover; display: block; background: var(--card); }
+.card .noimg { width: 100%; height: 140px; display: flex; align-items: center; justify-content: center; color: var(--hint); font-size: 34px; background: var(--card); }
+.card .body { padding: 12px 14px 14px; }
+.price { font-size: 19px; font-weight: 800; letter-spacing: -.3px; color: var(--text); }
+.price small { font-size: 12px; font-weight: 500; color: var(--hint); }
+.meta { font-size: 13px; color: var(--hint); margin-top: 3px; }
+.badges { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; }
+.badge { font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 8px; background: rgba(20, 28, 36, .62); color: #fff; backdrop-filter: blur(4px); }
+.badge.boost { background: linear-gradient(135deg, #f7b733, #f5820b); color: #3a2600; }
+.empty { text-align: center; color: var(--hint); padding: 56px 28px; }
+.empty svg { width: 76px; height: 76px; opacity: .9; margin-bottom: 16px; }
+.empty b { display: block; margin-bottom: 6px; color: var(--text); font-size: 18px; }
+.empty p { font-size: 14px; line-height: 1.5; max-width: 260px; margin: 0 auto; }
+.btn { display: block; width: 100%; padding: 14px; border: none; border-radius: 13px; background: var(--accent); color: var(--accent-text); font-size: 15px; font-weight: 700; cursor: pointer; text-align: center; }
 .btn.sec { background: var(--card); color: var(--text); margin-top: 8px; }
+.footer { text-align: center; color: var(--hint); font-size: 12px; padding: 22px 16px 4px; }
 /* detail sheet */
 .sheet { position: fixed; inset: 0; z-index: 50; background: var(--bg); overflow-y: auto; transform: translateY(100%); transition: transform .22s ease; }
 .sheet.open { transform: translateY(0); }
@@ -58,11 +70,24 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 8px 10px; border-ra
 .fact b { display: block; font-size: 15px; }
 .actions { padding: 0 14px 30px; }
 .contact-info { margin-top: 10px; font-size: 17px; font-weight: 600; text-align: center; }
+.contacts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.contactlink { display: inline-flex; align-items: center; padding: 9px 14px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--text); text-decoration: none; font-size: 13px; font-weight: 600; }
+.contactlink:active { transform: scale(.97); }
 </style>
 </head>
 <body>
 <header>
-  <h1>🏠 Găsește Casa <span class="tag">доска объявлений</span> <span class="count" id="count"></span></h1>
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Găsește Casa">
+      <defs><linearGradient id="gc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0fb2a0"/><stop offset="1" stop-color="#0a6e63"/></linearGradient></defs>
+      <rect width="64" height="64" rx="14" fill="url(#gc)"/>
+      <path d="M32 15 L49 30 H45 V47 a2 2 0 0 1-2 2 H21 a2 2 0 0 1-2-2 V30 H15 Z" fill="#fff"/>
+      <circle cx="32" cy="34" r="4.2" fill="#0a6e63"/>
+      <path d="M30.4 37 h3.2 l1.6 8 h-6.4 Z" fill="#0a6e63"/>
+    </svg>
+    <h1>Găsește Casa <span class="tag">Доска</span> <span class="count" id="count"></span></h1>
+  </div>
+  <button class="addcta" onclick="toBot('add')">➕ Добавить объявление · бесплатно, 2 минуты</button>
   <div class="filters">
     <div class="chips" id="dealChips">
       <button class="chip on" data-deal="">Все</button>
@@ -73,11 +98,10 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 8px 10px; border-ra
       <select id="district"><option value="">Все районы</option></select>
       <select id="ptype">
         <option value="">Любой тип</option><option value="apartment">Квартира</option>
-        <option value="house">Дом</option><option value="room">Комната</option>
       </select>
       <select id="rooms">
         <option value="">Комнат: все</option><option value="1">1</option><option value="2">2</option>
-        <option value="3">3</option><option value="4">4</option><option value="5">5+</option>
+        <option value="3">3+</option>
       </select>
       <input type="number" id="priceMax" placeholder="Цена max">
     </div>
@@ -86,11 +110,15 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 8px 10px; border-ra
 
 <main class="grid" id="grid"></main>
 <div class="empty" id="empty" style="display:none">
-  <b>Здесь пока пусто 😕</b>
-  Размести своё объявление бесплатно — открой бота и нажми «Разместить объект».
-  <div style="margin-top:14px"><button class="btn" onclick="toBot('add')">➕ Разместить объявление</button></div>
+  <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 28 L32 12 L52 28"/><path d="M18 25 V50 H46 V25"/><circle cx="32" cy="34" r="3.4"/><path d="M30.8 37 h2.4 l1.2 6 h-4.8 Z"/>
+  </svg>
+  <b>Здесь пока пусто</b>
+  <p>По этим фильтрам объявлений ещё нет. Разместите своё — бесплатно и за 2 минуты.</p>
+  <div style="margin-top:18px"><button class="btn" onclick="toBot('add')">➕ Разместить объявление</button></div>
 </div>
-<button class="btn sec" id="more" style="display:none; margin:0 14px">Показать ещё</button>
+<button class="btn sec" id="more" style="display:none; margin:0 16px">Показать ещё</button>
+<div class="footer">Găsește Casa · аренда и продажа · без комиссии · контакт всегда на карточке<br><span onclick="toBot('add')" style="text-decoration:underline;cursor:pointer">➕ Добавить своё объявление бесплатно →</span></div>
 
 <div class="sheet" id="sheet">
   <div class="top"><button class="back" onclick="closeSheet()">←</button> <b id="sheetTitle">Объявление</b></div>
@@ -150,7 +178,33 @@ async function load(append=false) {
 function toBot(startParam) {
   // tg.openTelegram does NOT exist - only openTelegramLink, and ?start= allows [A-Za-z0-9_-] only.
   const url = BOT_URL + "?start=" + encodeURIComponent(startParam);
-  if (tg && tg.openTelegramLink) tg.openTelegramLink(url); else window.open(url, "_blank");
+  // 1. the recommended WebApp API: it opens t.me links in Telegram natively
+  if (tg && typeof tg.openTelegramLink === "function") { tg.openTelegramLink(url); return; }
+  // 2. last-resort: an invisible anchor click. window.open is silently blocked by a lot of
+  //    embedded webviews (Telegram mobile, iOS), and it also loses the user gesture.
+  const a = document.createElement("a");
+  a.href = url; a.target = "_blank"; a.rel = "noopener";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// owner-set public channels -> (button label, url builder). mirrors keyboards.py:_CONTACT_CHANNELS
+// Viber is skipped - viber:// is not a valid Telegram inline URL and browsers strip it too.
+const _CHANNELS = {
+  telegram:  ["\uD83D\uDCAC Telegram",  (v) => v.startsWith("http") ? v : "https://t.me/" + v.replace(/^@/, "")],
+  instagram: ["\uD83D\uDCF7 Instagram", (v) => v.startsWith("http") ? v : "https://instagram.com/" + v.replace(/^@/, "")],
+  facebook:  ["\uD83D\uDCD8 Facebook",  (v) => v.startsWith("http") ? v : "https://facebook.com/" + v.replace(/^@/, "")],
+  whatsapp:  ["\uD83D\uDFE2 WhatsApp",  (v) => "https://wa.me/" + v.replace(/\D/g, "")],
+  site:      ["\uD83D\uDD17 Сайт",       (v) => v.startsWith("http") ? v : "https://" + v],
+};
+function contactsHtml(contacts) {
+  const parts = [];
+  for (const [k, raw] of Object.entries(contacts || {})) {
+    const ch = _CHANNELS[k]; const v = String(raw || "").trim();
+    if (!ch || !v) continue;
+    const url = ch[1](v); if (!url) continue;
+    parts.push(`<a class="contactlink" href="${esc(url)}" target="_blank" rel="noopener">${ch[0]}</a>`);
+  }
+  return parts.length ? `<div class="contacts">${parts.join("")}</div>` : "";
 }
 
 async function openDetail(id) {
@@ -169,6 +223,7 @@ async function openDetail(id) {
     <div class="sub">📍 ${esc(it.district)}</div>
     <div class="facts">${facts}</div>
     ${it.description?`<div class="desc">${esc(it.description)}</div>`:""}
+    ${contactsHtml(it.contacts)}
   </div>
   <div class="actions">
     <button class="btn" id="contactBtn" onclick="revealContact(${it.id})">📞 Показать контакт</button>

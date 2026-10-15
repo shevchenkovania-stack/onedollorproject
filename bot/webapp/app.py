@@ -89,6 +89,14 @@ def row_to_item(row, with_detail: bool = False) -> dict:
     }
     if with_detail:
         item["description"] = row["description"]
+        # owner's public channels (telegram / instagram / whatsapp / viber / facebook / site):
+        # these are not private like the phone, so they render directly on the sheet without
+        # the "reveal" gate. phone stays behind revealContact so the web_contact metric keeps
+        # counting real intent.
+        try:
+            item["contacts"] = json.loads(row["contacts"] or "{}") if row["contacts"] else {}
+        except (ValueError, TypeError):
+            item["contacts"] = {}
     return item
 
 
@@ -110,8 +118,10 @@ async def api_listings(request: web.Request) -> web.Response:
             where += f" AND {col} = ?"
             args.append(q[key])
     if q.get("rooms"):
-        where += " AND rooms = ?"
-        args.append(int(q["rooms"]))
+        r = int(q["rooms"])
+        # 1 / 2 are exact, the 3+ bucket means three or more rooms
+        where += " AND rooms >= ?" if r >= 3 else " AND rooms = ?"
+        args.append(r)
     if q.get("price_max"):
         where += " AND price <= ?"
         args.append(int(q["price_max"]))

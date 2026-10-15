@@ -1,4 +1,5 @@
 import html
+import re
 from urllib.parse import quote
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -21,12 +22,12 @@ def main_menu() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text=HELP, callback_data="menu:help")],
     ]
     if config.WEBAPP_URL:
-        kb.insert(1, [InlineKeyboardButton(text="\U0001F5FA\uFE0F Открыть приложение", web_app=WebAppInfo(url=config.WEBAPP_URL))])
+        kb.insert(1, [InlineKeyboardButton(text="\U0001F4F1 Открыть доску", web_app=WebAppInfo(url=config.WEBAPP_URL))])
     if config.CHANNEL_URL:
         kb.append([InlineKeyboardButton(text="\U0001F4E3 Канал с объектами", url=config.CHANNEL_URL)])
     share = share_url()
     if share:
-        kb.append([InlineKeyboardButton(text="\U0001F4E4 Позвать на Găsește Casa", url=share)])
+        kb.append([InlineKeyboardButton(text="\U0001F4E4 Пригласить друзей", url=share)])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 
@@ -50,16 +51,76 @@ def share_url(listing_id: int | None = None) -> str | None:
     return "https://t.me/share/url?url=" + quote(target, safe="") + "&text=" + quote(text)
 
 
-def listing_kb(listing_id: int, owner: bool, boosted: bool) -> InlineKeyboardMarkup:
+def listing_kb(listing_id: int, owner: bool, boosted: bool,
+               contacts: dict | None = None) -> InlineKeyboardMarkup:
     rows = []
     if owner:
         rows.append([InlineKeyboardButton(text="\U0001F680 Поднять (Boost)", callback_data=f"boost:{listing_id}")])
     rows.append([InlineKeyboardButton(text="\U0001F4DE Показать контакт", callback_data=f"contact:{listing_id}")])
+    # public channels the owner was ready to share: one tap -> the app opens. no reveal needed.
+    rows.extend(contact_buttons(contacts))
     share = share_url(listing_id)
     if share:
         rows.append([InlineKeyboardButton(text="\U0001F4E4 Поделиться объектом", url=share)])
+    if not owner:
+        # every opened card is a recruitment moment: a viewer who is looking at someone
+        # else's listing is one tap from being an owner. Put the pitch right before they
+        # leave the card.
+        rows.append([InlineKeyboardButton(text="\u2795 Разместить своё", callback_data="menu:add")])
     rows.append([InlineKeyboardButton(text="\u2b05\uFE0F К списку", callback_data="back:search")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+# every channel the owner may attach to a listing -> (button label, url builder).
+# NOTE: Telegram inline URL buttons only accept http(s):// and tg:// - viber://, tel: and
+# intent:// are rejected server-side with "Unsupported URL protocol" and take the whole card
+# down. so every builder here must return an https:// deeplink that the client can open.
+_CONTACT_CHANNELS = {
+    "telegram":  ("\U0001F4AC Telegram",  lambda v: _as_url(v, "https://t.me/", strip_at=True)),
+    "instagram": ("\U0001F4F7 Instagram", lambda v: _as_url(v, "https://instagram.com/", strip_at=True)),
+    "facebook":  ("\U0001F4D8 Facebook",  lambda v: _as_url(v, "https://facebook.com/", strip_at=True)),
+    "whatsapp":  ("\U0001F7E2 WhatsApp",  lambda v: "https://wa.me/" + re.sub(r"\D", "", str(v))),
+    "site":      ("\U0001F517 Сайт",       lambda v: _as_url(v, "https://")),
+}
+
+
+def _as_url(v: str, prefix: str, strip_at: bool = False) -> str:
+    s = str(v).strip()
+    if s.startswith("http"):
+        return s
+    if strip_at:
+        s = s.lstrip("@/")
+    return prefix + s
+
+
+def _safe_url(u: str) -> str | None:
+    """Return u only if Telegram will accept it as an inline URL button.
+    Stale viber:// rows already saved in the DB are silently filtered here so a bad contact
+    cannot take a card / channel post / Mini App render down."""
+    if not u:
+        return None
+    if not (u.startswith("https://") or u.startswith("http://") or u.startswith("tg://")):
+        return None
+    return u
+
+
+def contact_buttons(contacts: dict | None) -> list[list[InlineKeyboardButton]]:
+    """URL buttons for owner-supplied public channels. Unknown keys and unsupported
+    protocols are skipped silently so a stale dict never breaks a card render."""
+    out: list[list[InlineKeyboardButton]] = []
+    for key, val in (contacts or {}).items():
+        pair = _CONTACT_CHANNELS.get(key)
+        if not pair or not val:
+            continue
+        label, build = pair
+        try:
+            url = build(val)
+        except Exception:
+            continue
+        url = _safe_url(url)
+        if url:
+            out.append([InlineKeyboardButton(text=label, url=url)])
+    return out
 
 
 def usd(cents: int) -> str:

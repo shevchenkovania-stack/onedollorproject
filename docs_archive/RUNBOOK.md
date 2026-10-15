@@ -1,3 +1,5 @@
+> **Архив. Не обновляется.** Техчасть актуальна на 14.10; живой журнал — `AGENT.md`.
+
 # RUNBOOK — полное описание проекта «Găsește Casa / ChirieBot»
 
 **Зачем этот файл:** чтобы проект можно было восстановить с нуля **только по нему** — на новом сервере,
@@ -98,11 +100,12 @@ deploy/                  всё, что связано с сервером и п
   cleanup_test.sh, clean_board.sh (снять ДЕМО-карточку и всё, что на неё ссылается, — чтобы наружу
   не было видно тестового), test_share.py (прогон реферальной петли «поделиться» на реальном .env,
   без денег и без записей → `✅ SHARE LOOP OK`), test_money_path.py, make_demo.py, post_promo.py, audit.py, whoami.sh,
-  seed.py, mk_tmp_listing.py, setup_channel.py, set_avatar*, make_avatar.py, test_render.py,
+  seed.py, mk_tmp_listing.py, setup_channel.py, test_render.py,
   test_publish.py (E2E «подача→модерация→канал→webapp», сам себя убирает → `✅ BOARD PIPELINE OK`),
-  make_logo.py + logo.png (бренд: дом с замочной скважиной; перерисовать = `python deploy/make_logo.py`),
-  set_logo.py (поставить logo.png на бота И на канал; setMyProfilePhoto понимает фото только через
-  attach://), rename.py (единое видимое имя «Găsește Casa · Недвижимость Кишинёва» на боте и канале —
+  make_logo.py + logo_bot.png + logo_channel.png (бренд-семейство: дом с замочной скважиной, один знак
+  на двух поверхностях — бот в бирюзе, канал в графите; перерисовать оба = `python deploy/make_logo.py`),
+  set_logo.py `<bot.png> <channel.png>` (разные логотипы боту и каналу; setMyProfilePhoto понимает фото
+  только через attach://; по умолчанию /tmp/logo_bot.png и /tmp/logo_channel.png), rename.py (единое видимое имя «Găsește Casa · Недвижимость Кишинёва» на боте и канале —
   idempotent, печатает `✅ RENAMED OK`; chiriebot остаётся только внутренним кодовым именем в логах),
   pin_roles.py (описание канала + закреплённый пост-навигация «бот=инструмент, канал=лента,
   доска=витрина»; one-shot, при перезапуске повторит пост),
@@ -188,6 +191,8 @@ Lemon Squeezy ──POST /webhook/lemonsqueezy (подпись X-Signature)─�
 | `NUDGE_AFTER_DAYS` | `2` | через сколько дней после подачи напоминать про Boost | `2` |
 | `NUDGE_COOLDOWN_DAYS` | `4` | как часто можно напоминать по одному объявлению | `4` |
 | `NUDGE_INTERVAL_HOURS` | `6` | как часто напоминать про Boost (цикл спит **первым**, значит первый нудж не раньше 6 ч после рестарта; карточный ящик при этом опрашивается каждые 60 с) | `6` |
+| `GIFT_BOOSTS` | `1` | сколько бесплатных поднятий получает каждый из первых `GIFT_SLOTS` (0 = программа выключена) | `1` |
+| `GIFT_SLOTS` | `10` | сколько человек получают подарок (scarcity: "осталось N мест") | `10` |
 | `CONTACT_URL` | пусто | контакт поддержки в `/paysupport` | пусто |
 | `CHANNEL_ID` | пусто → публикация в канал выключена | `@username` публичного канала или `-100...` id | `@gaseste_casa` |
 | `CHANNEL_URL` | *(вычисляется)* | `https://t.me/<username>` если `CHANNEL_ID` начинается с `@` | t.me/gaseste_casa |

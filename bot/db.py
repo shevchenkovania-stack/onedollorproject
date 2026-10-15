@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS listings (
     photos TEXT DEFAULT '[]',
     status TEXT DEFAULT 'pending',
     boosted_until TEXT,
+    contacts TEXT DEFAULT NULL,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now')),
     views INTEGER DEFAULT 0
@@ -121,6 +122,9 @@ async def _migrate() -> None:
     cols = {r["name"] for r in await cur.fetchall()}
     if "nudged_at" not in cols:
         await _conn.execute("ALTER TABLE listings ADD COLUMN nudged_at TEXT")
+    if "contacts" not in cols:
+        # owner-set public channels: JSON {telegram, instagram, whatsapp, viber, facebook, site}
+        await _conn.execute("ALTER TABLE listings ADD COLUMN contacts TEXT DEFAULT NULL")
     cur = await _conn.execute("PRAGMA table_info(payments)")
     cols = {r["name"] for r in await cur.fetchall()}
     if "amount" not in cols:
@@ -151,8 +155,14 @@ async def ensure_schema(conn: aiosqlite.Connection) -> None:
 
     The Mini App process writes the card payment inbox, so it must not depend on the bot
     having created the schema first. All statements are IF NOT EXISTS -> safe to re-run.
+    Column migrations for the additive fields are handled here too (the bot runs them in
+    _migrate); if the webapp restarts before the bot, the schema must still be ready.
     """
     await conn.executescript(SCHEMA)
+    cur = await conn.execute("PRAGMA table_info(listings)")
+    cols = {r["name"] for r in await cur.fetchall()}
+    if "contacts" not in cols:
+        await conn.execute("ALTER TABLE listings ADD COLUMN contacts TEXT DEFAULT NULL")
     await conn.commit()
 
 
@@ -204,13 +214,14 @@ async def create_listing(**kw: Any) -> int:
     cur = await db.execute(
         """INSERT INTO listings
            (user_id, deal, ptype, rooms, price, currency, district, area,
-            floor, floors, phone, description, photos, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
+            floor, floors, phone, description, photos, contacts, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
         (
             kw["user_id"], kw["deal"], kw["ptype"], kw.get("rooms"), kw["price"],
             kw.get("currency", "EUR"), kw.get("district"), kw.get("area"),
             kw.get("floor"), kw.get("floors"), kw.get("phone"),
             kw.get("description"), json.dumps(kw.get("photos", [])),
+            json.dumps(kw.get("contacts") or {}, ensure_ascii=False),
         ),
     )
     await db.commit()
@@ -236,6 +247,22 @@ def listing_photos(row) -> list[str]:
         return json.loads(row["photos"] or "[]")
     except (TypeError, ValueError):
         return []
+
+
+def listing_contacts(row) -> dict:
+    """Owner's extra channels: {telegram, instagram, whatsapp, viber, facebook, site}.
+    Empty dict when nothing was set - the card just shows the phone."""
+    try:
+        raw = row["contacts"]
+    except (IndexError, KeyError, TypeError):
+        return {}
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 async def inc_views(listing_id: int) -> None:
@@ -285,7 +312,8 @@ async def search_listings(
         q += " AND district = ?"
         args.append(district)
     if rooms:
-        q += " AND rooms = ?"
+        # the filter exposes 1 / 2 / 3+ : a "3+" tap should catch every home with 3 or more rooms
+        q += " AND rooms >= ?" if rooms >= 3 else " AND rooms = ?"
         args.append(rooms)
     if price_max:
         q += " AND price <= ?"
@@ -315,7 +343,8 @@ async def count_search_listings(
         q += " AND district = ?"
         args.append(district)
     if rooms:
-        q += " AND rooms = ?"
+        # the filter exposes 1 / 2 / 3+ : a "3+" tap should catch every home with 3 or more rooms
+        q += " AND rooms >= ?" if rooms >= 3 else " AND rooms = ?"
         args.append(rooms)
     if price_max:
         q += " AND price <= ?"

@@ -12,6 +12,7 @@ import sys
 
 sys.path.insert(0, "/opt/imobiliare/bot")
 
+import config
 import db
 import keyboards
 
@@ -26,6 +27,8 @@ async def main() -> None:
     conn = db._db()
     payments_before, users_before = await counts(conn)
 
+    GIFT = config.GIFT_BOOSTS  # test must track the live config (currently 1)
+
     # a synthetic founder: user + first approved listing
     user = await db.get_or_create_user(999999001, "gifttest", "GIFT TEST")
     listing_id = await db.create_listing(
@@ -36,29 +39,29 @@ async def main() -> None:
 
     # 1. grant (what admin.py does on first approve) - huge slots arg so the test never
     #    eats a real founder slot; the event row is deleted in cleanup anyway
-    granted = await db.grant_gift_credits(user["id"], 10, 10 ** 9)
+    granted = await db.grant_gift_credits(user["id"], GIFT, 10 ** 9)
     assert granted, "gift not granted"
     row = await db.get_user_by_tg_id(999999001)
-    assert row["boost_credits"] == 10, row["boost_credits"]
+    assert row["boost_credits"] == GIFT, f"expected {GIFT} credits, got {row['boost_credits']}"
 
     # 2. double-grant must be a no-op (one person = one gift)
-    assert not await db.grant_gift_credits(user["id"], 10, 10 ** 9), "granted twice"
+    assert not await db.grant_gift_credits(user["id"], GIFT, 10 ** 9), "granted twice"
 
     # 3. the offer keyboard must show the free-raise button
-    kb = keyboards.boost_kb(listing_id, 10)
+    kb = keyboards.boost_kb(listing_id, GIFT)
     assert any("gift:" in (b.callback_data or "") for r in kb.inline_keyboard for b in r), "no gift button"
 
-    # 4. spend -> top placement
+    # 4. spend one -> top placement
     assert await db.spend_gift_credit(user["id"]), "spend failed"
     await db.boost_listing(listing_id, 7)
     await db.log_boost(listing_id, user["id"], 0, 7, status="gift")
     row = await db.get_user_by_tg_id(999999001)
-    assert row["boost_credits"] == 9, row["boost_credits"]
+    assert row["boost_credits"] == GIFT - 1, f"after 1 spend expected {GIFT-1}, got {row['boost_credits']}"
     lst = await db.get_listing(listing_id)
     assert lst["boosted_until"], "listing not boosted"
 
-    # 5. spend until empty, then one over-spend must fail
-    for _ in range(9):
+    # 5. spend remaining credits then one over-spend must fail
+    for _ in range(GIFT - 1):
         assert await db.spend_gift_credit(user["id"])
     assert not await db.spend_gift_credit(user["id"]), "spent from empty pocket"
 
@@ -74,7 +77,7 @@ async def main() -> None:
     await conn.commit()
     _, users_after = await counts(conn)
     assert users_after == users_before, "user residue"
-    print("✅ GIFT LOOP OK (grant -> button -> spend -> top -> no money -> zero residue)")
+    print(f"✅ GIFT LOOP OK (grant {GIFT} -> button -> spend -> top -> no money -> zero residue)")
     sys.stdout.flush()
     os._exit(0)
 

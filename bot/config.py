@@ -57,11 +57,12 @@ NUDGE_COOLDOWN_DAYS = int(os.getenv("NUDGE_COOLDOWN_DAYS", "4"))
 NUDGE_INTERVAL_HOURS = int(os.getenv("NUDGE_INTERVAL_HOURS", "6"))
 
 # Founders gift: the first GIFT_SLOTS users whose listing gets approved receive GIFT_BOOSTS free
-# top-raises each. This is the outreach engine - "принеси объект, получи 10 поднятий бесплатно".
+# top-raises each. This is the outreach engine - "принеси объект, получи поднятие в топ бесплатно".
 # Free boosts never touch the payment rails: no payments rows, revenue stays honest.
-# GIFT_BOOSTS=0 disables the program entirely. 10 slots, not 100: the scarcity must be real -
-# "осталось 4 места" через неделю продаёт лучше, чем обещание, которое никогда не закроется.
-GIFT_BOOSTS = int(os.getenv("GIFT_BOOSTS", "10"))
+# GIFT_BOOSTS=0 disables the program entirely. 1, not 10: a boost lasts 7 days; 10 credits push the
+# first real payment ~70 days out. The purpose is to let them try the drug ONCE, then sell the next.
+# 10 slots, not 100: the scarcity must be real - "осталось 4 места" через неделю продаёт лучше.
+GIFT_BOOSTS = int(os.getenv("GIFT_BOOSTS", "1"))
 GIFT_SLOTS = int(os.getenv("GIFT_SLOTS", "10"))
 
 CONTACT_URL = os.getenv("CONTACT_URL", "")

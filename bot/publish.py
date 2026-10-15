@@ -31,9 +31,20 @@ async def download_photos(bot: Bot, row) -> None:
 
 def contact_kb(row, owner) -> InlineKeyboardMarkup | None:
     rows = []
-    if owner and owner["username"]:
+    contacts = db.listing_contacts(row) or {}
+    # owner may set an explicit public tg handle on the listing; if so it wins over the
+    # personal @username from their Telegram profile, so we do not render two Telegram buttons
+    if contacts.get("telegram"):
+        rows.append([InlineKeyboardButton(
+            text="\U0001F4AC Написать в Telegram",
+            url="https://t.me/" + str(contacts["telegram"]).lstrip("@").removeprefix("https://t.me/"))])
+    elif owner and owner["username"]:
         rows.append([InlineKeyboardButton(text="\U0001F4AC Написать в Telegram",
                                          url=f"https://t.me/{owner['username']}")])
+    # every other public channel the owner was willing to attach: instagram / whatsapp /
+    # viber / facebook / site. same builder as the DM card, one source of truth
+    without_tg = {k: v for k, v in contacts.items() if k != "telegram"}
+    rows.extend(keyboards.contact_buttons(without_tg))
     browse_url = config.WEBAPP_URL or config.CHANNEL_URL
     if browse_url:
         rows.append([InlineKeyboardButton(text="\U0001F50D Смотреть все объекты", url=browse_url)])
@@ -53,6 +64,10 @@ async def to_channel(bot: Bot, row) -> list[int]:
     caption = render.listing_caption(row)
     if row["phone"]:
         caption += f"\n\U0001F4DE {row['phone']}"
+    # reinforce the CTA keyboard in text: when a card is forwarded, the buttons can be cut off
+    # on preview, but the caption always travels with the photo.
+    if config.BOT_URL:
+        caption += f"\n\n\U0001F4E3 Так же бесплатно → {config.BOT_URL}?start=add"
     owner = await db.get_user_by_id(row["user_id"])
     kb = contact_kb(row, owner)
     web_photos = [os.path.join(config.PHOTOS_DIR, f"{row['id']}_{i}.jpg")
