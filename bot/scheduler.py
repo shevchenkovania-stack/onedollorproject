@@ -30,6 +30,75 @@ _silence_alert_at = 0.0
 # lost sale that looks exactly like a customer who never paid.
 MANUAL_REMIND_HOURS = 6  # a claim is reminded at most once per this window (dedup lives in events)
 
+_DEAL_LABEL = {"rent": "\u0410\u0440\u0435\u043d\u0434\u0430", "sale": "\u041f\u0440\u043e\u0434\u0430\u0436\u0430"}
+
+
+def _alert_match(a, listing) -> bool:
+    """Pure rule, no DB: does a freshly live ad satisfy one saved search? Mirrors api_listings:
+    deal / exact district (case-insensitive) / rooms bucket (3 means 3+) / price ceiling / free text.
+    A None on the alert means 'any' for that field."""
+    if a["deal"] and a["deal"] != listing["deal"]:
+        return False
+    if a["district"]:
+        if (listing["district"] or "").strip().lower() != str(a["district"]).strip().lower():
+            return False
+    if a["rooms"]:
+        lr = listing["rooms"]
+        if lr is None:
+            return False
+        if a["rooms"] >= 3:
+            if lr < 3:
+                return False
+        elif lr != a["rooms"]:
+            return False
+    if a["price_max"] and (listing["price"] or 0) > a["price_max"]:
+        return False
+    if a["query"]:
+        hay = ((listing["district"] or "") + " " + (listing["description"] or "")).lower()
+        if str(a["query"]).lower() not in hay:
+            return False
+    return True
+
+
+async def notify_search_subscribers(bot: Bot, listing) -> int:
+    """Push a just-approved ad to everyone watching a matching search (screen 08).
+
+    Owner never receives their own ad; a subscriber already past this id is skipped, and the id is
+    only advanced on a real delivery, so a blocked chat can't silently consume the alert."""
+    sent = 0
+    lid = listing["id"]
+    for a in await db.all_search_alerts():
+        if a["user_id"] == listing["user_id"] or a["last_listing_id"] >= lid:
+            continue
+        if not _alert_match(a, listing):
+            continue
+        deal = _DEAL_LABEL.get(listing["deal"], listing["deal"] or "")
+        dist = listing["district"] or "\u2014"
+        cur = listing["currency"] or ""
+        price = listing["price"]
+        rooms = f" \u00b7 {listing['rooms']} \u043a\u043e\u043c\u043d." if listing["rooms"] else ""
+        cap = (f"\U0001F514 <b>\u041d\u043e\u0432\u043e\u0435 \u043f\u043e \u0442\u0432\u043e\u0435\u043c\u0443 \u043f\u043e\u0438\u0441\u043a\u0443</b>\n"
+               f"{deal}{rooms} \u00b7 \U0001F4CD {dist}\n"
+               f"\U0001F4B8 {price} {cur}")
+        if config.WEBAPP_URL:
+            btn = {"text": "\U0001F441 \u041e\u0442\u043a\u0440\u044b\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435",
+                   "url": config.WEBAPP_URL.rstrip("/") + f"/#listing={lid}"}
+        else:
+            btn = {"text": "\U0001F441 \u041e\u0442\u043a\u0440\u044b\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435",
+                   "callback_data": f"view:{lid}"}
+        try:
+            await bot.send_message(a["tg_id"], cap, parse_mode="HTML",
+                                   reply_markup={"inline_keyboard": [[btn]]})
+        except Exception as e:  # blocked / deleted chat: leave last_listing_id so we can retry a newer ad
+            log.info("search alert #%s -> tg %s skipped: %s", a["id"], a["tg_id"], e)
+            continue
+        await db.touch_search_alert(a["id"], lid)
+        sent += 1
+    if sent:
+        await db.log_event("search_alert_push", listing_id=lid, meta=str(sent))
+    return sent
+
+
 
 async def nudge_unboosted(bot: Bot) -> int:
     """Offer a Boost to owners of live, currently unboosted listings."""

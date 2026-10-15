@@ -134,10 +134,23 @@ async def api_listings(request: web.Request) -> web.Response:
     if q.get("price_max"):
         where += " AND price <= ?"
         args.append(int(q["price_max"]))
+    if q.get("q"):
+        # free text over district + description, the way a person actually searches
+        like = "%" + q["q"].strip()[:60] + "%"
+        where += " AND (district LIKE ? OR description LIKE ?)"
+        args += [like, like]
     page = max(int(q.get("page", "1")), 1)
     per = 20
-    order = ("ORDER BY (boosted_until IS NOT NULL AND boosted_until > datetime('now')) DESC, created_at DESC "
-             f"LIMIT {per} OFFSET {(page - 1) * per}")
+    # boosted ads always lead; the tie-break is the sort the user picked (new / cheaper / dearer)
+    top = "(boosted_until IS NOT NULL AND boosted_until > datetime('now')) DESC"
+    sort = q.get("sort")
+    if sort == "cheap":
+        tail = "price ASC"
+    elif sort == "expensive":
+        tail = "price DESC"
+    else:
+        tail = "created_at DESC"
+    order = f"ORDER BY {top}, {tail} LIMIT {per} OFFSET {(page - 1) * per}"
     db = request.app["db"]
     cur = await db.execute(f"SELECT * FROM listings WHERE {where} {order}", args)
     rows = await cur.fetchall()
@@ -481,6 +494,106 @@ async def api_upload_photos(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "id": listing_id, "photos": [f"/photos/{n}" for n in names]})
 
 
+# ---------- Saved search ("Следить за поиском"): auth-gated, owner-scoped ----------
+
+def _alert_filters(body: dict) -> dict:
+    """Normalise a filter set the same way api_listings reads it. Empty strings become None
+    (= 'any'), so a saved alert matches the live search exactly."""
+    deal = (str(body.get("deal") or "").strip() or None)
+    if deal not in ("rent", "sale"):
+        deal = None
+    district = (str(body.get("district") or "").strip() or None)
+    rooms_raw = str(body.get("rooms") or "").strip()
+    rooms = int(rooms_raw) if rooms_raw.isdigit() else None
+    if rooms is not None and rooms >= 3:
+        rooms = 3  # the 3+ bucket, mirroring api_listings
+    pm_raw = str(body.get("price_max") or "").strip()
+    price_max = int(re.sub(r"[^\d]", "", pm_raw) or 0) if pm_raw else None
+    if price_max is not None and price_max <= 0:
+        price_max = None
+    query = (str(body.get("query") or "").strip()[:60] or None)
+    return {"deal": deal, "district": district, "rooms": rooms, "price_max": price_max, "query": query}
+
+
+async def api_create_search_alert(request: web.Request) -> web.Response:
+    """Watch the current search. Re-subscribing the same filter re-arms it without duplicating.
+    last_listing_id starts at the newest live id, so the owner is only pinged for genuinely new ads."""
+    viewer = auth_user(request)
+    if not viewer:
+        return web.json_response({"error": "auth_required"}, status=401)
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "bad_json"}, status=400)
+    f = _alert_filters(body)
+    conn = request.app["db"]
+    cur = await conn.execute("SELECT id FROM users WHERE tg_id = ?", (viewer["id"],))
+    urow = await cur.fetchone()
+    if not urow:
+        return web.json_response({"error": "no_user"}, status=400)
+    uid = urow["id"]
+    # one alert per identical filter set -> re-arm instead of piling up duplicates
+    cur = await conn.execute(
+        "SELECT id FROM search_alerts WHERE user_id = ? AND ifnull(deal,'') = ifnull(?, '') "
+        "AND ifnull(district,'') = ifnull(?, '') AND ifnull(rooms,-1) = ifnull(?, -1) "
+        "AND ifnull(price_max,-1) = ifnull(?, -1) AND lower(ifnull(query,'')) = lower(ifnull(?, ''))",
+        (uid, f["deal"], f["district"], f["rooms"], f["price_max"], f["query"]))
+    existing = await cur.fetchone()
+    cur = await conn.execute("SELECT COALESCE(MAX(id), 0) m FROM listings")
+    newest = (await cur.fetchone())["m"]
+    if existing:
+        await conn.execute("UPDATE search_alerts SET last_listing_id = ? WHERE id = ?",
+                           (newest, existing["id"]))
+        await conn.commit()
+        return web.json_response({"ok": True, "id": existing["id"], "existed": True})
+    cur = await conn.execute(
+        "INSERT INTO search_alerts (user_id, tg_id, deal, district, rooms, price_max, query, last_listing_id) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (uid, viewer["id"], f["deal"], f["district"], f["rooms"], f["price_max"], f["query"], newest))
+    await conn.execute("INSERT INTO events (name, user_id) VALUES ('search_alert_created', ?)", (uid,))
+    await conn.commit()
+    return web.json_response({"ok": True, "id": cur.lastrowid, "existed": False})
+
+
+async def api_search_alerts(request: web.Request) -> web.Response:
+    """The viewer's saved searches, so the app can show which filters are already watched."""
+    viewer = auth_user(request)
+    if not viewer:
+        return web.json_response({"error": "auth_required"}, status=401)
+    conn = request.app["db"]
+    cur = await conn.execute("SELECT id FROM users WHERE tg_id = ?", (viewer["id"],))
+    urow = await cur.fetchone()
+    if not urow:
+        return web.json_response({"items": []})
+    cur = await conn.execute(
+        "SELECT * FROM search_alerts WHERE user_id = ? ORDER BY created_at DESC", (urow["id"],))
+    rows = await cur.fetchall()
+    items = [{
+        "id": r["id"], "deal": r["deal"], "district": r["district"], "rooms": r["rooms"],
+        "price_max": r["price_max"], "query": r["query"],
+    } for r in rows]
+    return web.json_response({"items": items})
+
+
+async def api_delete_search_alert(request: web.Request) -> web.Response:
+    """Unsubscribe. Owner-only: DELETE is scoped by user_id, so a foreign id simply no-ops to 404."""
+    viewer = auth_user(request)
+    if not viewer:
+        return web.json_response({"error": "auth_required"}, status=401)
+    alert_id = int(request.match_info["id"])
+    conn = request.app["db"]
+    cur = await conn.execute("SELECT id FROM users WHERE tg_id = ?", (viewer["id"],))
+    urow = await cur.fetchone()
+    if not urow:
+        return web.json_response({"error": "not_found"}, status=404)
+    cur = await conn.execute("DELETE FROM search_alerts WHERE id = ? AND user_id = ?",
+                             (alert_id, urow["id"]))
+    await conn.commit()
+    if cur.rowcount == 0:
+        return web.json_response({"error": "not_found"}, status=404)
+    return web.json_response({"ok": True, "id": alert_id})
+
+
 async def webhook_lemonsqueezy(request: web.Request) -> web.Response:
     """Card payment inbox. No init-data auth: the HMAC signature of the raw body is the proof.
 
@@ -523,6 +636,9 @@ async def app_factory() -> web.Application:
     app.router.add_post("/api/listing/{id}/action", api_listing_action)
     app.router.add_post("/api/listing", api_create_listing)
     app.router.add_post("/api/listing/{id}/photos", api_upload_photos)
+    app.router.add_post("/api/search/alert", api_create_search_alert)
+    app.router.add_get("/api/search/alerts", api_search_alerts)
+    app.router.add_post("/api/search/alert/{id}/delete", api_delete_search_alert)
     app.router.add_post("/webhook/lemonsqueezy", webhook_lemonsqueezy)
     os.makedirs(PHOTOS_DIR, exist_ok=True)
     app.router.add_static("/photos/", PHOTOS_DIR)

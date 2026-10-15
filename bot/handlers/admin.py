@@ -72,6 +72,14 @@ async def moderate(cb: CallbackQuery, bot: Bot) -> None:
             await bot.send_message(owner["tg_id"], note, parse_mode="HTML", reply_markup=keyboards.main_menu())
         except Exception:
             pass
+    if status == "active":
+        # saved-search push: everyone watching a matching filter gets the new ad in the bot
+        try:
+            n = await scheduler.notify_search_subscribers(bot, row)
+            if n:
+                log.info("search alerts pushed for #%s: %s", listing_id, n)
+        except Exception:
+            log.exception("search alert push failed for #%s", listing_id)
 
 
 @router.callback_query(F.data.startswith("manapp:") | F.data.startswith("manrej:"))

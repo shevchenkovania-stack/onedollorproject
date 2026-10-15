@@ -63,7 +63,24 @@ def test_routes_registered():
         assert need in paths, f"route {need} not registered"
     for h in ("api_my_listings", "api_listing_action", "api_create_listing", "api_upload_photos"):
         assert h in handlers, f"handler {h} not wired"
+    # saved-search endpoints (screen 08)
+    for need in ("/api/search/alert", "/api/search/alerts", "/api/search/alert/{id}/delete"):
+        assert need in paths, f"route {need} not registered"
+    for h in ("api_create_search_alert", "api_search_alerts", "api_delete_search_alert"):
+        assert h in handlers, f"handler {h} not wired"
     print("PASS  test_routes_registered")
+
+
+def test_saved_search_ui():
+    """The app must expose live search + the subscribe-to-search loop in the UI."""
+    html = _read(STATIC)
+    for el in ("followBtn", "favChip", "mySubs", "sort", "q"):
+        assert f'id="{el}"' in html, f"search UI missing {el}"
+    for fn in ("function toggleFollow(", "function renderMySubs(", "function alertKey(", "/api/search/alert"):
+        assert fn in html, f"saved-search JS missing {fn}"
+    # free-text + sort must reach the API through params()
+    assert 'p.set("q"' in html and '"sort"' in html
+    print("PASS  test_saved_search_ui")
 
 
 def test_submit_form_native():
@@ -260,6 +277,97 @@ def _tiny_jpeg():
     return buf.getvalue()
 
 
+def test_alert_match():
+    """The pure scheduler rule that decides if a new ad satisfies a saved search."""
+    try:
+        import scheduler
+    except ModuleNotFoundError as e:
+        print(f"SKIP  test_alert_match ({e.name} not installed locally)")
+        return
+    m = scheduler._alert_match
+    listing = {"deal": "rent", "district": "\u0426\u0435\u043d\u0442\u0440", "rooms": 2, "price": 450,
+               "description": "\u0441 \u0431\u0430\u043b\u043a\u043e\u043d\u043e\u043c", "user_id": 1, "id": 5}
+    any_ = {"deal": None, "district": None, "rooms": None, "price_max": None, "query": None}
+    assert m(any_, listing), "empty filter matches everything"
+    assert m({**any_, "deal": "rent"}, listing)
+    assert not m({**any_, "deal": "sale"}, listing), "wrong deal excluded"
+    assert m({**any_, "district": "\u0426\u0415\u041d\u0422\u0420"}, listing), "district is case-insensitive"
+    assert not m({**any_, "district": "\u0411\u043e\u0442\u0430\u043d\u0438\u043a\u0430"}, listing)
+    assert m({**any_, "rooms": 3}, {**listing, "rooms": 4}), "3+ bucket matches 4 rooms"
+    assert not m({**any_, "rooms": 3}, {**listing, "rooms": 2}), "3+ excludes 2 rooms"
+    assert not m({**any_, "rooms": 1}, listing), "exact 1 != 2"
+    assert m({**any_, "price_max": 500}, listing)
+    assert not m({**any_, "price_max": 400}, listing), "over the ceiling excluded"
+    assert m({**any_, "query": "\u0431\u0430\u043b\u043a\u043e\u043d"}, listing), "free text hits description"
+    assert not m({**any_, "query": "\u043f\u0430\u0440\u043a\u043e\u0432\u043a\u0430"}, listing)
+    print("PASS  test_alert_match")
+
+
+async def _alert_tests():
+    import aiosqlite
+    import app as webapp
+    import config
+    webapp.BOT_TOKEN = "test-token"
+    config.ADMIN_IDS = []
+
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    conn = None
+    try:
+        conn = await aiosqlite.connect(path)
+        conn.row_factory = aiosqlite.Row
+        import db
+        await db.ensure_schema(conn)
+        await conn.execute("INSERT INTO users (tg_id, username, first_name) VALUES (111,'o','O')")
+        await conn.execute("INSERT INTO users (tg_id, username, first_name) VALUES (222,'s','S')")
+        await conn.execute(
+            "INSERT INTO listings (user_id, deal, ptype, price, currency, district, status, photos) "
+            "VALUES (1,'rent','apartment',500,'EUR','Centr','active','[]')")
+        await conn.commit()
+        app = {"db": conn}
+        owner_hdr = {"X-Init-Data": _signed_init_data(111, "test-token")}
+        other_hdr = {"X-Init-Data": _signed_init_data(222, "test-token")}
+        filt = {"deal": "rent", "district": "Centr", "rooms": "2", "price_max": "450", "query": "park"}
+
+        # 1. auth gate
+        st, _ = _jresp(await webapp.api_create_search_alert(_FakeReq(headers={}, app=app, body=filt)))
+        assert st == 401, f"create alert without auth should be 401, got {st}"
+        # 2. owner creates
+        st, data = _jresp(await webapp.api_create_search_alert(_FakeReq(headers=owner_hdr, app=app, body=filt)))
+        assert st == 200 and data["ok"] and not data["existed"], (st, data)
+        aid = data["id"]
+        # 3. identical filter re-arms instead of duplicating
+        st, data = _jresp(await webapp.api_create_search_alert(_FakeReq(headers=owner_hdr, app=app, body=filt)))
+        assert st == 200 and data["existed"] and data["id"] == aid, (st, data)
+        # 4. last_listing_id seeded to newest listing id so only future ads ping
+        cur = await conn.execute("SELECT last_listing_id FROM search_alerts WHERE id=?", (aid,))
+        assert (await cur.fetchone())["last_listing_id"] == 1, "should start at the newest live id"
+        # 5. list returns it
+        st, data = _jresp(await webapp.api_search_alerts(_FakeReq(headers=owner_hdr, app=app)))
+        assert st == 200 and len(data["items"]) == 1 and data["items"][0]["id"] == aid, (st, data)
+        # 6. another user cannot delete it (owner-scoped) -> 404
+        st, _ = _jresp(await webapp.api_delete_search_alert(
+            _FakeReq(headers=other_hdr, app=app, match_info={"id": str(aid)})))
+        assert st == 404, f"non-owner delete should be 404, got {st}"
+        # 7. owner deletes
+        st, data = _jresp(await webapp.api_delete_search_alert(
+            _FakeReq(headers=owner_hdr, app=app, match_info={"id": str(aid)})))
+        assert st == 200 and data["ok"], (st, data)
+        cur = await conn.execute("SELECT COUNT(*) c FROM search_alerts")
+        assert (await cur.fetchone())["c"] == 0
+        print("PASS  test_endpoints_saved_search")
+    finally:
+        if conn is not None:
+            try:
+                await conn.close()
+            except Exception:
+                pass
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
 async def _photo_tests():
     import aiosqlite
     import app as webapp
@@ -336,12 +444,18 @@ async def _photo_tests():
 if __name__ == "__main__":
     test_spa_tab_bar()
     test_routes_registered()
+    test_saved_search_ui()
     test_submit_form_native()
     test_write_endpoints_require_auth()
+    test_alert_match()
     try:
         asyncio.run(_endpoint_tests())
     except ModuleNotFoundError as e:
         print(f"SKIP  test_endpoints_phase_b ({e.name} not installed locally)")
+    try:
+        asyncio.run(_alert_tests())
+    except ModuleNotFoundError as e:
+        print(f"SKIP  test_endpoints_saved_search ({e.name} not installed locally)")
     try:
         asyncio.run(_photo_tests())
     except ModuleNotFoundError as e:

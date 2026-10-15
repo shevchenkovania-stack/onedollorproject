@@ -32,9 +32,22 @@ h1 .tag { font-size: 11px; font-weight: 600; color: var(--brand-dark); backgroun
 .chips::-webkit-scrollbar { display: none; }
 .chip { flex: 0 0 auto; padding: 8px 15px; border-radius: 999px; background: var(--card); color: var(--text); border: 1px solid var(--line); font-size: 13px; font-weight: 500; cursor: pointer; transition: .15s; }
 .chip.on { background: var(--brand); color: #fff; border-color: transparent; box-shadow: 0 2px 8px color-mix(in srgb, var(--brand) 40%, transparent); }
-select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 11px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font-size: 14px; }
+select, input[type=number], input[type=tel], input[type=text] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 11px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font-size: 14px; }
 .addcta { display: block; width: 100%; margin-top: 10px; padding: 10px 14px; border-radius: 11px; background: var(--brand); color: #fff; border: none; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px color-mix(in srgb, var(--brand) 30%, transparent); }
 .row { display: flex; gap: 8px; flex-wrap: wrap; }
+/* search bar: a real text field + a bell that turns the current filter into a subscription */
+.searchbar { display: flex; gap: 8px; align-items: stretch; margin-top: 12px; }
+.qwrap { flex: 1; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); }
+.qwrap span { color: var(--hint); font-size: 15px; }
+.qwrap input { flex: 1; border: none; background: none; color: var(--text); font-size: 15px; padding: 11px 0; }
+.qwrap input:focus { outline: none; }
+.bell { flex: 0 0 auto; width: 46px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font-size: 19px; cursor: pointer; }
+.bell.on { background: var(--brand); border-color: transparent; box-shadow: 0 2px 10px color-mix(in srgb, var(--brand) 45%, transparent); }
+.subrow { display: flex; gap: 8px; align-items: center; }
+.subrow select { flex: 1; }
+.favchip { flex: 0 0 auto; padding: 9px 14px; border-radius: 11px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; }
+.favchip.on { background: #ffe3ea; color: #c2185b; border-color: #f6c6d4; }
+.found { padding: 12px 16px 0; font-size: 13px; color: var(--hint); font-weight: 600; }
 .grid { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px; }
 .card { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; cursor: pointer; position: relative; box-shadow: var(--shadow); transition: transform .12s; }
 .card:active { transform: scale(.99); }
@@ -47,6 +60,9 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-ra
 .badges { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; }
 .badge { font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 8px; background: rgba(20, 28, 36, .62); color: #fff; backdrop-filter: blur(4px); }
 .badge.boost { background: linear-gradient(135deg, #f7b733, #f5820b); color: #3a2600; }
+.pcount { position: absolute; bottom: 78px; right: 10px; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 8px; background: rgba(20, 28, 36, .62); color: #fff; backdrop-filter: blur(4px); }
+.fav { position: absolute; top: 8px; right: 8px; width: 34px; height: 34px; border-radius: 50%; border: none; background: rgba(255, 255, 255, .82); color: #b0413e; font-size: 17px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--shadow); }
+.fav.on { background: #fff; color: #e0245e; }
 .empty { text-align: center; color: var(--hint); padding: 56px 28px; }
 .empty svg { width: 76px; height: 76px; opacity: .9; margin-bottom: 16px; }
 .empty b { display: block; margin-bottom: 6px; color: var(--text); font-size: 18px; }
@@ -54,6 +70,10 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-ra
 .btn { display: block; width: 100%; padding: 14px; border: none; border-radius: 13px; background: var(--accent); color: var(--accent-text); font-size: 15px; font-weight: 700; cursor: pointer; text-align: center; }
 .btn.sec { background: var(--card); color: var(--text); margin-top: 8px; }
 .footer { text-align: center; color: var(--hint); font-size: 12px; padding: 22px 16px 4px; }
+/* skeleton shimmer while the board loads */
+.sk { border-radius: var(--radius); background: var(--card); position: relative; overflow: hidden; height: 250px; }
+.sk::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent); animation: sh 1.2s infinite; }
+@keyframes sh { 100% { transform: translateX(100%); } }
 /* detail sheet */
 .sheet { position: fixed; inset: 0; z-index: 50; background: var(--bg); overflow-y: auto; transform: translateY(100%); transition: transform .22s ease; }
 .sheet.open { transform: translateY(0); }
@@ -70,24 +90,20 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-ra
 .fact b { display: block; font-size: 15px; }
 .actions { padding: 0 14px 30px; }
 .contact-info { margin-top: 10px; font-size: 17px; font-weight: 600; text-align: center; }
+.contact-info a { color: var(--brand-dark); text-decoration: none; }
 .contacts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .contactlink { display: inline-flex; align-items: center; padding: 9px 14px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--text); text-decoration: none; font-size: 13px; font-weight: 600; }
 .contactlink:active { transform: scale(.97); }
 /* bottom tab bar: the app is one window - search / submit / my */
 .tabs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; display: flex; background: var(--bg); border-top: 1px solid var(--line); padding: 6px 0 max(6px, env(safe-area-inset-bottom)); }
-.tab { flex: 1; border: none; background: none; color: var(--hint); font-size: 11px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; padding: 6px 0; font-family: inherit; }
+.tab { flex: 1; border: none; background: none; color: var(--hint); font-size: 11px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; padding: 6px 0; font-family: inherit; position: relative; }
 .tab .ic { font-size: 20px; line-height: 1; }
 .tab.on { color: var(--brand); }
 .view { display: none; }
 .view.on { display: block; }
-.stub { padding: 46px 26px; text-align: center; }
-.stub .stubic { font-size: 46px; margin-bottom: 12px; }
-.stub b { display: block; font-size: 19px; margin-bottom: 8px; }
-.stub p { color: var(--hint); font-size: 14px; line-height: 1.5; max-width: 300px; margin: 0 auto 18px; }
-.stub .btn { max-width: 320px; margin: 0 auto; }
-/* Phase B: my listings */
+/* my listings + subscriptions */
 .mywrap { padding: 14px 16px; }
-.myhead { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.myhead { display: flex; align-items: center; gap: 8px; margin: 4px 0 12px; }
 .myhead b { font-size: 18px; }
 .myhead .count { font-size: 12px; color: var(--hint); margin-left: auto; }
 .myitem { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px; margin-bottom: 12px; }
@@ -104,7 +120,8 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-ra
 .mabtn:active { transform: scale(.97); }
 .mabtn.primary { background: var(--brand); color: #fff; border-color: transparent; }
 .mabtn[disabled] { opacity: .5; pointer-events: none; }
-/* Phase C: native submit form (3 steps) */
+.subitem .ttl { display: flex; align-items: center; gap: 6px; }
+/* native submit form (3 steps) */
 .formwrap { padding: 16px; max-width: 520px; margin: 0 auto; }
 .steps { display: flex; gap: 6px; margin-bottom: 16px; }
 .stp { flex: 1; text-align: center; font-size: 12px; font-weight: 600; color: var(--hint); padding: 8px 4px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); }
@@ -116,7 +133,6 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-ra
 .fnav { display: flex; gap: 10px; margin-top: 22px; }
 .fnav .btn { flex: 1; }
 .ferr { color: #a11212; font-size: 13px; text-align: center; margin-top: 12px; min-height: 18px; }
-/* Phase D: photo picker */
 .flabel .hint { color: var(--hint); font-weight: 400; font-size: 12px; }
 .thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .thumbs img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); }
@@ -136,11 +152,23 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-ra
     <h1>Găsește Casa <span class="tag">Доска</span> <span class="count" id="count"></span></h1>
   </div>
   <button class="addcta" onclick="openSubmit()">➕ Добавить объявление · бесплатно, 2 минуты</button>
+  <div class="searchbar">
+    <label class="qwrap"><span>🔍</span><input id="q" type="text" placeholder="Район, улица, «с балконом»…" autocomplete="off"></label>
+    <button class="bell" id="followBtn" onclick="toggleFollow()" title="Следить за этим поиском">🔔</button>
+  </div>
   <div class="filters">
     <div class="chips" id="dealChips">
       <button class="chip on" data-deal="">Все</button>
       <button class="chip" data-deal="rent">🏠 Аренда</button>
       <button class="chip" data-deal="sale">💰 Продажа</button>
+    </div>
+    <div class="subrow">
+      <select id="sort">
+        <option value="new">Сначала новые</option>
+        <option value="cheap">Сначала дешёвые</option>
+        <option value="expensive">Сначала дорогие</option>
+      </select>
+      <button class="favchip" id="favChip" onclick="toggleFavOnly()">♥ Избранное</button>
     </div>
     <div class="row">
       <select id="district"><option value="">Все районы</option></select>
@@ -156,6 +184,7 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-ra
   </div>
 </header>
 
+<div class="found" id="found"></div>
 <main class="grid" id="grid"></main>
 <div class="empty" id="empty" style="display:none">
   <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -210,6 +239,7 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-ra
 
 <div class="view" id="viewMy">
   <div class="mywrap">
+    <div id="mySubs"></div>
     <div class="myhead"><b>Мои объявления</b><span class="count" id="myCount"></span></div>
     <div class="grid" id="myList"></div>
     <div class="empty" id="myEmpty" style="display:none">
@@ -238,8 +268,11 @@ const INIT = tg?.initData || "";
 const MY_ID = tg?.initDataUnsafe?.user?.id || 0;
 const BOT_URL = "{{BOT_URL}}"; // replaced by webapp/app.py on serve (config-driven, no hardcode)
 const DISTRICTS = ["Центр","Ботаника","Буюканы","Рышкановка","Чеканы","Дурлешты","Кодры","Стэучень","Кондрица","Бачой","Криково","Сынджера","Тохатин","Бубуечь","Другое"];
+const DEAL_LABEL = { rent: "Аренда", sale: "Продажа" };
 
-const state = { deal:"", district:"", ptype:"", rooms:"", price_max:"", page:1, total:0 };
+const state = { deal:"", district:"", ptype:"", rooms:"", price_max:"", q:"", sort:"new", page:1, total:0, favOnly:false };
+let CACHE = [];   // the listings currently rendered (so the favorites filter needs no new request)
+let SUBS  = [];   // the viewer's saved searches
 const $ = (id) => document.getElementById(id);
 
 async function api(path, opts={}) {
@@ -253,36 +286,140 @@ function esc(s){ return (s??"").toString().replace(/[&<>"']/g, c => ({"&":"&amp;
 
 function params() {
   const p = new URLSearchParams();
-  for (const k of ["deal","district","ptype","rooms","price_max"]) if (state[k]) p.set(k, state[k]);
+  for (const k of ["deal","district","ptype","rooms","price_max","sort"]) if (state[k]) p.set(k, state[k]);
+  if (state.q) p.set("q", state.q);
   p.set("page", state.page);
   return p.toString();
+}
+
+// ---------- favourites (client-side, so they work even before we add a server table) ----------
+const FAV = new Set(JSON.parse(localStorage.getItem("gc_fav") || "[]"));
+function isFav(id){ return FAV.has(+id); }
+function saveFav(){ localStorage.setItem("gc_fav", JSON.stringify([...FAV])); }
+function toggleFav(id, ev) {
+  if (ev) ev.stopPropagation();
+  id = +id;
+  if (FAV.has(id)) FAV.delete(id); else FAV.add(id);
+  saveFav();
+  document.querySelectorAll(`[data-fav="${id}"]`).forEach(b => b.classList.toggle("on", FAV.has(id)));
+  if (state.favOnly) renderGrid();
+}
+function toggleFavOnly() {
+  state.favOnly = !state.favOnly;
+  $("favChip").classList.toggle("on", state.favOnly);
+  renderGrid();
 }
 
 function cardHtml(it) {
   const img = it.photos.length ? `<img src="${it.photos[0]}" loading="lazy">` : `<div class="noimg">🏠</div>`;
   const badges = `<div class="badges">${it.boosted?'<span class="badge boost">🚀 Boost</span>':''}<span class="badge">${esc(it.deal_label)}</span></div>`;
+  const pc = it.photos.length > 1 ? `<span class="pcount">📷 ${it.photos.length}</span>` : "";
   const facts = [it.rooms?it.rooms+"к":"", it.area?it.area+" м²":"", it.floor?it.floor+(it.floors?"/"+it.floors:"")+" эт":""].filter(Boolean).join(" · ");
-  return `<div class="card" onclick="openDetail(${it.id})">${badges}${img}
-    <div class="body"><div class="price">${it.price} <small>${esc(it.currency)}/мес</small></div>
+  const fav = `<button class="fav ${isFav(it.id)?'on':''}" data-fav="${it.id}" onclick="toggleFav(${it.id}, event)">${isFav(it.id)?'♥':'♡'}</button>`;
+  const per = it.deal === "sale" ? "" : "/мес";
+  return `<div class="card" onclick="openDetail(${it.id})">${fav}${badges}${img}${pc}
+    <div class="body"><div class="price">${it.price} <small>${esc(it.currency)}${per}</small></div>
     <div class="meta">${esc(it.ptype_label)} · ${esc(it.district)}${facts?" · "+facts:""}</div></div></div>`;
 }
 
+function showSkeleton() {
+  $("grid").innerHTML = Array.from({length: 4}).map(() => '<div class="sk"></div>').join("");
+  $("empty").style.display = "none";
+}
+
+function renderGrid() {
+  const items = state.favOnly ? CACHE.filter(it => isFav(it.id)) : CACHE;
+  $("grid").innerHTML = items.map(cardHtml).join("");
+  if (state.favOnly && !items.length) {
+    $("empty").querySelector("b").textContent = "В избранном пусто";
+    $("empty").querySelector("p").textContent = "Нажми ♡ на карточке, чтобы сохранить объявление здесь.";
+  }
+  $("empty").style.display = items.length ? "none" : "block";
+}
+
 async function load(append=false) {
+  if (!append) showSkeleton();
   try {
     const data = await api("/api/listings?"+params());
     state.total = data.total;
-    const html = data.items.map(cardHtml).join("");
-    $("grid").insertAdjacentHTML(append ? "beforeend" : "afterbegin", html);
-    if (!append) $("grid").innerHTML = html;
-    $("empty").style.display = data.total ? "none" : "block";
-    $("more").style.display = data.items.length && data.page*data.per < data.total ? "block" : "none";
-  } catch(e) { $("empty").style.display="block"; }
+    CACHE = append ? CACHE.concat(data.items) : data.items;
+    renderGrid();
+    $("found").textContent = state.total ? `Найдено ${state.total} объявл.` : "";
+    $("more").style.display = CACHE.length && state.page*data.per < data.total ? "block" : "none";
+  } catch(e) { renderGrid(); }
   const s = await api("/api/stats").catch(()=>({active:0}));
   $("count").textContent = s.active ? s.active+" объявл." : "";
 }
 
-// bottom tab navigation: one app window, three views. search is native; submit/my are
-// handed to the bot until Phase B (Мои) and Phase C (Подать) make them native here.
+// ---------- saved search ("Следить за поиском") ----------
+function alertKey(f) {
+  const rooms = (f.rooms == null || f.rooms === "") ? "" : String(+f.rooms >= 3 ? 3 : +f.rooms);
+  return [f.deal || "", f.district || "", rooms, f.price_max || "", (f.query || "").toLowerCase()].join("|");
+}
+function currentAlertFilter() {
+  return { deal: state.deal, district: state.district, rooms: state.rooms, price_max: state.price_max, query: state.q };
+}
+function watchedNow() { const k = alertKey(currentAlertFilter()); return SUBS.find(a => alertKey(a) === k); }
+function updateFollowBtn() { const b = $("followBtn"); if (b) { const on = !!watchedNow(); b.classList.toggle("on", on); b.textContent = on ? "🔔" : "🔕"; } }
+async function refreshSubs() { try { SUBS = (await api("/api/search/alerts")).items; } catch (e) { SUBS = []; } updateFollowBtn(); }
+
+async function toggleFollow() {
+  if (!MY_ID) { notice("Открой приложение через Telegram, чтобы следить за поиском"); return; }
+  const btn = $("followBtn"); btn.disabled = true;
+  try {
+    const a = watchedNow();
+    if (a) {
+      await api(`/api/search/alert/${a.id}/delete`, { method: "POST", headers: {"Content-Type": "application/json"}, body: "{}" });
+      SUBS = SUBS.filter(x => x.id !== a.id);
+      notice("Больше не следим за этим поиском");
+    } else {
+      await api("/api/search/alert", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(currentAlertFilter()) });
+      await refreshSubs();
+      notice("Готово! Как только появится новое совпадение — напишем тебе в бота 🔔");
+    }
+    updateFollowBtn(); renderMySubs();
+    tg?.HapticFeedback?.notification?.("success");
+  } catch (e) {
+    notice(e && e.message === "401" ? "Открой через Telegram, чтобы следить" : "Не удалось. Попробуй ещё раз.");
+  } finally { btn.disabled = false; }
+}
+
+function subLabel(a) {
+  const bits = [];
+  if (a.deal) bits.push(DEAL_LABEL[a.deal] || a.deal);
+  if (a.district) bits.push(a.district);
+  if (a.rooms) bits.push((a.rooms >= 3 ? "3+" : a.rooms) + " комн.");
+  if (a.price_max) bits.push("до " + a.price_max);
+  if (a.query) bits.push("«" + a.query + "»");
+  return bits.length ? bits.join(" · ") : "Все новые объявления";
+}
+function renderMySubs() {
+  const box = $("mySubs"); if (!box) return;
+  if (!SUBS.length) { box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="myhead"><b>🔔 Мои подписки</b><span class="count">${SUBS.length}</span></div>` +
+    SUBS.map(a => `<div class="myitem subitem"><div class="top"><div><div class="ttl">${esc(subLabel(a))}</div>
+      <div class="sub">Пришлём новые совпадения в бота</div></div></div>
+      <div class="myacts"><button class="mabtn primary" onclick="applyAlert(${a.id})">🔍 Открыть поиск</button>
+      <button class="mabtn" onclick="deleteAlert(${a.id})">✕ Отписаться</button></div></div>`).join("");
+}
+function applyAlert(id) {
+  const a = SUBS.find(x => x.id === id); if (!a) return;
+  state.deal = a.deal || ""; state.district = a.district || ""; state.rooms = a.rooms || "";
+  state.price_max = a.price_max || ""; state.q = a.query || "";
+  $("q").value = state.q; $("district").value = state.district; $("ptype").value = state.ptype;
+  $("rooms").value = state.rooms; $("priceMax").value = state.price_max;
+  document.querySelectorAll("#dealChips .chip").forEach(c => c.classList.toggle("on", (c.dataset.deal||"") === state.deal));
+  state.page = 1; state.favOnly = false; $("favChip").classList.remove("on");
+  showView("search"); load();
+}
+async function deleteAlert(id) {
+  try {
+    await api(`/api/search/alert/${id}/delete`, { method: "POST", headers: {"Content-Type": "application/json"}, body: "{}" });
+    SUBS = SUBS.filter(x => x.id !== id); renderMySubs(); updateFollowBtn();
+  } catch (e) { notice("Не удалось отписаться"); }
+}
+
+// ---------- tab navigation: one app window, three views ----------
 const _VIEWS = { search: "viewSearch", submit: "viewSubmit", my: "viewMy" };
 const _TABS = { search: "tabSearch", submit: "tabSubmit", my: "tabMy" };
 function showView(name) {
@@ -297,16 +434,13 @@ function showView(name) {
 function toBot(startParam) {
   // tg.openTelegram does NOT exist - only openTelegramLink, and ?start= allows [A-Za-z0-9_-] only.
   const url = BOT_URL + "?start=" + encodeURIComponent(startParam);
-  // 1. the recommended WebApp API: it opens t.me links in Telegram natively
   if (tg && typeof tg.openTelegramLink === "function") { tg.openTelegramLink(url); return; }
-  // 2. last-resort: an invisible anchor click. window.open is silently blocked by a lot of
-  //    embedded webviews (Telegram mobile, iOS), and it also loses the user gesture.
   const a = document.createElement("a");
   a.href = url; a.target = "_blank"; a.rel = "noopener";
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
-// ---- Phase C: native submit wizard (deal+rooms / district+price / contacts) ----
+// ---------- native submit wizard (deal+rooms / district+price / contacts) ----------
 const SUB = { step: 1, deal: "rent", rooms: "1", district: "", price: "", currency: "EUR", description: "", phone: "" };
 function openSubmit() { subGoto(SUB.step || 1); showView("submit"); }
 window.onEnterSubmit = function () { subGoto(SUB.step || 1); };
@@ -345,8 +479,6 @@ async function subSend() {
     const r = await api("/api/listing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
       deal: SUB.deal, ptype: "apartment", rooms: SUB.rooms, district: SUB.district, price: SUB.price,
       currency: SUB.currency, description: SUB.description, phone: SUB.phone }) });
-    // Phase D: photos are attached to the just-created listing (best-effort - the ad is already
-    // in moderation even if an upload fails). FormData lets the browser set the multipart boundary.
     if (r && r.id && files.length) {
       try {
         const fd = new FormData();
@@ -392,7 +524,10 @@ $("roomSel").addEventListener("click", (e) => {
   SUB.rooms = b.dataset.rooms; selectChip("#roomSel", "data-rooms", SUB.rooms);
 });
 $("subDistrict").innerHTML += DISTRICTS.map(d => `<option>${d}</option>`).join("");
+
+// ---------- my listings + owner lifecycle ----------
 async function renderMy() {
+  await refreshSubs(); renderMySubs();
   const list = $("myList"), empty = $("myEmpty");
   if (!MY_ID) { list.innerHTML = ""; empty.style.display = "block"; $("myCount").textContent = ""; return; }
   let items;
@@ -441,7 +576,6 @@ async function myAction(id, action, btn) {
 }
 
 // owner-set public channels -> (button label, url builder). mirrors keyboards.py:_CONTACT_CHANNELS
-// Viber is skipped - viber:// is not a valid Telegram inline URL and browsers strip it too.
 const _CHANNELS = {
   telegram:  ["\uD83D\uDCAC Telegram",  (v) => v.startsWith("http") ? v : "https://t.me/" + v.replace(/^@/, "")],
   instagram: ["\uD83D\uDCF7 Instagram", (v) => v.startsWith("http") ? v : "https://instagram.com/" + v.replace(/^@/, "")],
@@ -502,21 +636,25 @@ async function revealContact(id) {
 
 function closeSheet(){ $("sheet").classList.remove("open"); }
 
-// filters wiring
+// ---------- filters wiring ----------
 $("dealChips").addEventListener("click", (e) => {
   const b = e.target.closest(".chip"); if (!b) return;
   document.querySelectorAll("#dealChips .chip").forEach(c=>c.classList.remove("on"));
-  b.classList.add("on"); state.deal = b.dataset.deal; state.page = 1; load();
+  b.classList.add("on"); state.deal = b.dataset.deal; state.page = 1; CACHE = []; updateFollowBtn(); load();
 });
+let qtimer;
+$("q").addEventListener("input", () => { clearTimeout(qtimer); qtimer = setTimeout(() => { state.q = $("q").value.trim(); state.page = 1; CACHE = []; updateFollowBtn(); load(); }, 350); });
+$("sort").addEventListener("change", () => { state.sort = $("sort").value; state.page = 1; CACHE = []; load(); });
 $("district").innerHTML += DISTRICTS.map(d=>`<option>${d}</option>`).join("");
 ["district","ptype","rooms","priceMax"].forEach(id => $(id).addEventListener("change", () => {
   state.district = $("district").value; state.ptype = $("ptype").value;
   state.rooms = $("rooms").value; state.price_max = $("priceMax").value;
-  state.page = 1; load();
+  state.page = 1; CACHE = []; updateFollowBtn(); load();
 }));
 $("more").addEventListener("click", () => { state.page++; load(true); });
 
 if (location.hash.startsWith("#listing=")) openDetail(+location.hash.split("=")[1]);
+refreshSubs();
 load();
 </script>
 </body>

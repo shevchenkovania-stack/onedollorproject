@@ -97,6 +97,24 @@ CREATE TABLE IF NOT EXISTS card_orders (
     applied INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
 );
+
+-- Saved search: a Mini App user watches a filter set and the bot pushes new matching ads to them.
+-- Written by the webapp process, read by the scheduler (single writer for the push). last_listing_id
+-- is the newest listing id already delivered, so a subscriber never sees the same ad twice.
+CREATE TABLE IF NOT EXISTS search_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    tg_id INTEGER NOT NULL,
+    deal TEXT,
+    district TEXT,
+    rooms INTEGER,
+    price_max INTEGER,
+    query TEXT,
+    last_listing_id INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_alerts_user ON search_alerts(user_id);
 """
 
 
@@ -176,6 +194,20 @@ async def ensure_schema(conn: aiosqlite.Connection) -> None:
 def _db() -> aiosqlite.Connection:
     assert _conn is not None, "DB not initialized"
     return _conn
+
+
+async def all_search_alerts():
+    """Every saved-search row. The scheduler matches them in Python (the rules mirror
+    api_listings: deal / exact district / rooms bucket / price ceiling / free-text query)."""
+    cur = await _db().execute("SELECT * FROM search_alerts")
+    return await cur.fetchall()
+
+
+async def touch_search_alert(alert_id: int, listing_id: int) -> None:
+    """Remember the newest listing already delivered to this subscriber, so it is never re-sent."""
+    await _db().execute("UPDATE search_alerts SET last_listing_id = ? WHERE id = ? AND last_listing_id < ?",
+                        (listing_id, alert_id, listing_id))
+    await _db().commit()
 
 
 async def get_or_create_user(tg_id: int, username: str | None, first_name: str | None) -> aiosqlite.Row:
