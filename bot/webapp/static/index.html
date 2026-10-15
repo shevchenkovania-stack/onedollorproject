@@ -104,6 +104,18 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-ra
 .mabtn:active { transform: scale(.97); }
 .mabtn.primary { background: var(--brand); color: #fff; border-color: transparent; }
 .mabtn[disabled] { opacity: .5; pointer-events: none; }
+/* Phase C: native submit form (3 steps) */
+.formwrap { padding: 16px; max-width: 520px; margin: 0 auto; }
+.steps { display: flex; gap: 6px; margin-bottom: 16px; }
+.stp { flex: 1; text-align: center; font-size: 12px; font-weight: 600; color: var(--hint); padding: 8px 4px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); }
+.stp.on { color: #fff; background: var(--brand); border-color: transparent; }
+.flabel { font-size: 13px; font-weight: 600; color: var(--text); margin: 16px 0 8px; }
+.fstep select, .fstep input[type=number], .fstep input[type=tel], .fstep textarea { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font-size: 15px; font-family: inherit; }
+.fstep textarea { resize: vertical; }
+.curtag { display: flex; align-items: center; color: var(--hint); font-weight: 600; font-size: 14px; padding-left: 4px; }
+.fnav { display: flex; gap: 10px; margin-top: 22px; }
+.fnav .btn { flex: 1; }
+.ferr { color: #a11212; font-size: 13px; text-align: center; margin-top: 12px; min-height: 18px; }
 </style>
 </head>
 <body>
@@ -119,7 +131,7 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-ra
     </svg>
     <h1>Găsește Casa <span class="tag">Доска</span> <span class="count" id="count"></span></h1>
   </div>
-  <button class="addcta" onclick="toBot('add')">➕ Добавить объявление · бесплатно, 2 минуты</button>
+  <button class="addcta" onclick="openSubmit()">➕ Добавить объявление · бесплатно, 2 минуты</button>
   <div class="filters">
     <div class="chips" id="dealChips">
       <button class="chip on" data-deal="">Все</button>
@@ -147,18 +159,44 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-ra
   </svg>
   <b>Здесь пока пусто</b>
   <p>По этим фильтрам объявлений ещё нет. Разместите своё — бесплатно и за 2 минуты.</p>
-  <div style="margin-top:18px"><button class="btn" onclick="toBot('add')">➕ Разместить объявление</button></div>
+  <div style="margin-top:18px"><button class="btn" onclick="openSubmit()">➕ Разместить объявление</button></div>
 </div>
 <button class="btn sec" id="more" style="display:none; margin:0 16px">Показать ещё</button>
-<div class="footer">Găsește Casa · аренда и продажа · без комиссии · контакт всегда на карточке<br><span onclick="toBot('add')" style="text-decoration:underline;cursor:pointer">➕ Добавить своё объявление бесплатно →</span></div>
+<div class="footer">Găsește Casa · аренда и продажа · без комиссии · контакт всегда на карточке<br><span onclick="openSubmit()" style="text-decoration:underline;cursor:pointer">➕ Добавить своё объявление бесплатно →</span></div>
 </div><!-- /viewSearch -->
 
 <div class="view" id="viewSubmit">
-  <div class="stub">
-    <div class="stubic">➕</div>
-    <b>Подать объявление</b>
-    <p>Оформишь объект в пару шагов — бесплатно. Пока подача открыта в боте.</p>
-    <button class="btn" onclick="toBot('add')">➕ Открыть подачу в боте</button>
+  <div class="formwrap">
+    <div class="steps"><span class="stp on" data-s="1">1 · Сделка</span><span class="stp" data-s="2">2 · Район, цена</span><span class="stp" data-s="3">3 · Контакты</span></div>
+    <form id="subForm" onsubmit="return false" autocomplete="off">
+      <div class="fstep" data-step="1">
+        <div class="flabel">Что предлагаем?</div>
+        <div class="chips" id="dealSel">
+          <button type="button" class="chip on" data-deal="rent">🏠 Сдам в аренду</button>
+          <button type="button" class="chip" data-deal="sale">💰 Продам</button>
+        </div>
+        <div class="flabel">Комнат</div>
+        <div class="chips" id="roomSel">
+          <button type="button" class="chip on" data-rooms="1">1</button>
+          <button type="button" class="chip" data-rooms="2">2</button>
+          <button type="button" class="chip" data-rooms="3">3+</button>
+        </div>
+      </div>
+      <div class="fstep" data-step="2" style="display:none">
+        <div class="flabel">Район</div>
+        <select id="subDistrict"><option value="">Выбери район</option></select>
+        <div class="flabel">Цена</div>
+        <div class="row"><input type="number" id="subPrice" inputmode="numeric" placeholder="напр. 450"><span class="curtag" id="curTag">€ /мес</span></div>
+      </div>
+      <div class="fstep" data-step="3" style="display:none">
+        <div class="flabel">Пара строк о объекте</div>
+        <textarea id="subDesc" rows="4" placeholder="Светлая квартира, рядом парк, заезд с телефона... (необязательно)"></textarea>
+        <div class="flabel">Телефон для связи</div>
+        <input type="tel" id="subPhone" inputmode="tel" placeholder="+373 60 123 456">
+      </div>
+      <div class="fnav"><button type="button" class="btn sec" id="subBack" onclick="subBack()" style="display:none">← Назад</button><button type="button" class="btn" id="subNext" onclick="subNext()">Далее →</button></div>
+      <div class="ferr" id="subErr"></div>
+    </form>
   </div>
 </div>
 
@@ -260,9 +298,69 @@ function toBot(startParam) {
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
-// ---- Phase B: my listings (native «Мои» tab) ------------------------------
-function openSubmit() { showView("submit"); }   // becomes the native form in Phase C
+// ---- Phase C: native submit wizard (deal+rooms / district+price / contacts) ----
+const SUB = { step: 1, deal: "rent", rooms: "1", district: "", price: "", currency: "EUR", description: "", phone: "" };
+function openSubmit() { subGoto(SUB.step || 1); showView("submit"); }
+window.onEnterSubmit = function () { subGoto(SUB.step || 1); };
 
+function selectChip(sel, attr, val) {
+  document.querySelectorAll(sel + " .chip").forEach(c => c.classList.toggle("on", c.getAttribute(attr) === String(val)));
+}
+function subGoto(step) {
+  SUB.step = step;
+  document.querySelectorAll("#subForm .fstep").forEach(el => el.style.display = (+el.dataset.step === step ? "" : "none"));
+  document.querySelectorAll(".steps .stp").forEach(el => el.classList.toggle("on", +el.dataset.s <= step));
+  $("subBack").style.display = step > 1 ? "" : "none";
+  $("subNext").textContent = step < 3 ? "Далее →" : "Отправить ✓";
+  $("subErr").textContent = "";
+}
+function subBack() { if (SUB.step > 1) subGoto(SUB.step - 1); }
+function subErr(msg) { $("subErr").textContent = msg; }
+
+async function subNext() {
+  if (SUB.step === 1) { subGoto(2); return; }
+  if (SUB.step === 2) {
+    SUB.district = $("subDistrict").value; SUB.price = $("subPrice").value;
+    if (!SUB.district) { subErr("Выбери район"); return; }
+    if (!(parseInt(SUB.price, 10) > 0)) { subErr("Укажи цену"); return; }
+    subGoto(3); return;
+  }
+  SUB.description = $("subDesc").value; SUB.phone = $("subPhone").value;
+  if ((SUB.phone.match(/\d/g) || []).length < 6) { subErr("Введи телефон корректно"); return; }
+  await subSend();
+}
+
+async function subSend() {
+  const btn = $("subNext"); btn.disabled = true; subErr("");
+  try {
+    await api("/api/listing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      deal: SUB.deal, ptype: "apartment", rooms: SUB.rooms, district: SUB.district, price: SUB.price,
+      currency: SUB.currency, description: SUB.description, phone: SUB.phone }) });
+    tg?.HapticFeedback?.notification?.("success");
+    notice("Отправлено на модерацию ✅ Появится в поиске после проверки.");
+    subReset(); showView("my");   // the pending card now shows under «Мои»
+  } catch (e) {
+    subErr(e && e.message === "401" ? "Открой приложение через Telegram, чтобы подавать" : "Не удалось отправить. Попробуй ещё раз.");
+  } finally { btn.disabled = false; }
+}
+
+function subReset() {
+  Object.assign(SUB, { step: 1, deal: "rent", rooms: "1", district: "", price: "", description: "", phone: "" });
+  selectChip("#dealSel", "data-deal", "rent"); selectChip("#roomSel", "data-rooms", "1");
+  $("subDistrict").value = ""; $("subPrice").value = ""; $("subDesc").value = ""; $("subPhone").value = "";
+  $("curTag").textContent = "€ /мес";
+}
+
+$("dealSel").addEventListener("click", (e) => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  SUB.deal = b.dataset.deal; selectChip("#dealSel", "data-deal", SUB.deal);
+  $("curTag").textContent = SUB.deal === "sale" ? "€" : "€ /мес";
+});
+$("roomSel").addEventListener("click", (e) => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  SUB.rooms = b.dataset.rooms; selectChip("#roomSel", "data-rooms", SUB.rooms);
+});
+$("subDistrict").innerHTML += DISTRICTS.map(d => `<option>${d}</option>`).join("");
 async function renderMy() {
   const list = $("myList"), empty = $("myEmpty");
   if (!MY_ID) { list.innerHTML = ""; empty.style.display = "block"; $("myCount").textContent = ""; return; }
@@ -288,7 +386,7 @@ function myCardHtml(it) {
 
 function myActions(it) {
   if (it.status === "pending") return `<button class="mabtn" onclick="notice('На модерации. Как только одобрим — объявление появится в поиске.')">🕒 Ждёт модерации</button>`;
-  if (it.status === "rejected") return `<button class="mabtn" onclick="toBot('add')">✏️ Подать заново</button>`;
+  if (it.status === "rejected") return `<button class="mabtn" onclick="openSubmit()">✏️ Подать заново</button>`;
   return `<button class="mabtn" onclick="myAction(${it.id},'sold',this)">✅ Сдано</button>`
        + `<button class="mabtn primary" onclick="myAction(${it.id},'extend',this)">🔄 Продлить</button>`
        + `<button class="mabtn" onclick="myAction(${it.id},'delete',this)">🗑 Удалить</button>`;

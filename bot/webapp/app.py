@@ -9,11 +9,13 @@ import hmac
 import json
 import logging
 import os
+import re
 import sys
 import time
 import urllib.parse
 
 import aiosqlite
+import aiohttp
 from aiohttp import web
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -272,6 +274,122 @@ async def api_listing_action(request: web.Request) -> web.Response:
     })
 
 
+# ---------- Phase C: submit a listing from the app (auth-gated) ----------
+
+# same phone rule as the bot wizard (add.py): 9+ digits, optional +, only horizontal separators.
+_PHONE_RE = re.compile(r"\+?\d[\d().\- \t]{7,}\d")
+
+
+def _esc(v) -> str:
+    return (str(v) if v is not None else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+async def _notify_admins(listing_id: int, it: dict) -> bool:
+    """Ping the admins for moderation. The callback buttons are handled by the polling bot
+    process (same BOT_TOKEN), so approving from the app works exactly like from the wizard."""
+    if not BOT_TOKEN or not config.ADMIN_IDS:
+        return False
+    cap = (f"\U0001F195 <b>Новое объявление #{listing_id}</b> (из Mini App)\n"
+           f"{_esc(DEAL_LABELS.get(it['deal'], it['deal']))} · {_esc(it['ptype'])}\n"
+           f"\U0001F4CD {_esc(it['district'])} · \U0001F4B8 {it['price']} {_esc(it['currency'])}")
+    if it.get("rooms"):
+        cap += f" · {it['rooms']} комн."
+    if it.get("phone"):
+        cap += f"\n\U0001F4DE {_esc(it['phone'])}"
+    if it.get("description"):
+        cap += f"\n\n{_esc(it['description'])[:500]}"
+    kb = {"inline_keyboard": [[
+        {"text": "\u2705 Одобрить", "callback_data": f"mod:approve:{listing_id}"},
+        {"text": "\u274C Отклонить", "callback_data": f"mod:reject:{listing_id}"}],
+        [{"text": "\U0001F441 Показать", "callback_data": f"view:{listing_id}"}]]}
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    ok = False
+    try:
+        async with aiohttp.ClientSession() as s:
+            for admin in config.ADMIN_IDS:
+                try:
+                    async with s.post(url, json={"chat_id": admin, "text": cap, "parse_mode": "HTML",
+                                                 "reply_markup": kb}) as r:
+                        ok = ok or r.status == 200
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return ok
+
+
+async def api_create_listing(request: web.Request) -> web.Response:
+    """Create a pending listing from the Mini App. Mirrors the bot wizard's 3 steps:
+    deal+rooms -> district+price -> phone+description. Never publishes: status stays 'pending'."""
+    viewer = auth_user(request)
+    if not viewer:
+        return web.json_response({"error": "auth_required"}, status=401)
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "bad_json"}, status=400)
+
+    deal = str(body.get("deal") or "").strip()
+    if deal not in ("rent", "sale"):
+        return web.json_response({"error": "bad_deal"}, status=400)
+    district = str(body.get("district") or "").strip()[:80]
+    if not district:
+        return web.json_response({"error": "district_required"}, status=400)
+    try:
+        price = int(re.sub(r"[^\d]", "", str(body.get("price") or "")) or "0")
+    except ValueError:
+        price = 0
+    if price <= 0:
+        return web.json_response({"error": "price_required"}, status=400)
+    phone_raw = str(body.get("phone") or "")
+    m = _PHONE_RE.search(phone_raw)
+    digits = re.sub(r"\D", "", phone_raw)
+    # a phone must actually contain a phone: the wizard's 9+-digit match, else any 6+-digit input
+    phone = m.group(0).strip() if m else (phone_raw.strip()[:32] if len(digits) >= 6 else "")
+    if not phone:
+        return web.json_response({"error": "phone_required"}, status=400)
+    description = str(body.get("description") or "")[:2000]
+    rooms_raw = str(body.get("rooms") or "").strip()
+    rooms = int(rooms_raw) if rooms_raw.isdigit() else None
+    ptype = (str(body.get("ptype") or "").strip() or "apartment")[:16]
+    currency = (str(body.get("currency") or config.DEFAULT_CURRENCY or "EUR").strip() or "EUR")[:8]
+
+    conn = request.app["db"]
+    cur = await conn.execute("SELECT id FROM users WHERE tg_id = ?", (viewer["id"],))
+    urow = await cur.fetchone()
+    if urow:
+        uid = urow["id"]
+    else:
+        cur = await conn.execute(
+            "INSERT INTO users (tg_id, username, first_name) VALUES (?, ?, ?)",
+            (viewer["id"], viewer.get("username"), viewer.get("first_name")))
+        await conn.commit()
+        uid = cur.lastrowid
+
+    # rate limit: a flood of pending ads is spam, not supply (5 per 10 min per owner)
+    cur = await conn.execute(
+        "SELECT COUNT(*) c FROM listings WHERE user_id = ? "
+        "AND created_at > datetime('now','-10 minutes')", (uid,))
+    if (await cur.fetchone())["c"] >= 5:
+        return web.json_response({"error": "too_many", "retry_after_min": 10}, status=429)
+
+    cur = await conn.execute(
+        "INSERT INTO listings (user_id, deal, ptype, rooms, price, currency, district, phone, "
+        "description, photos, contacts, status) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '{}', 'pending')",
+        (uid, deal, ptype, rooms, price, currency, district, phone, description))
+    await conn.commit()
+    listing_id = cur.lastrowid
+    await conn.execute(
+        "INSERT INTO events (name, user_id, listing_id) VALUES ('listing_created', ?, ?)",
+        (uid, listing_id))
+    await conn.commit()
+    await _notify_admins(listing_id, {
+        "deal": deal, "ptype": ptype, "rooms": rooms, "price": price, "currency": currency,
+        "district": district, "phone": phone, "description": description})
+    return web.json_response({"ok": True, "id": listing_id, "status": "pending"})
+
+
 async def webhook_lemonsqueezy(request: web.Request) -> web.Response:
     """Card payment inbox. No init-data auth: the HMAC signature of the raw body is the proof.
 
@@ -312,6 +430,7 @@ async def app_factory() -> web.Application:
     app.router.add_get("/api/stats", api_stats)
     app.router.add_get("/api/my/listings", api_my_listings)
     app.router.add_post("/api/listing/{id}/action", api_listing_action)
+    app.router.add_post("/api/listing", api_create_listing)
     app.router.add_post("/webhook/lemonsqueezy", webhook_lemonsqueezy)
     os.makedirs(PHOTOS_DIR, exist_ok=True)
     app.router.add_static("/photos/", PHOTOS_DIR)

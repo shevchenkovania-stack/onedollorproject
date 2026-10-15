@@ -57,7 +57,22 @@ def test_routes_registered():
     for need in ("/", "/api/listings", "/api/stats"):
         assert need in paths, f"route {need} not registered"
     assert "index" in handlers and "api_listings" in handlers
+    # phase B + C endpoints
+    for need in ("/api/my/listings", "/api/listing/{id}/action", "/api/listing"):
+        assert need in paths, f"route {need} not registered"
+    for h in ("api_my_listings", "api_listing_action", "api_create_listing"):
+        assert h in handlers, f"handler {h} not wired"
     print("PASS  test_routes_registered")
+
+
+def test_submit_form_native():
+    """Phase C: «Подать» is a real 3-step form, not a hand-off to the bot."""
+    html = _read(STATIC)
+    assert 'id="subForm"' in html
+    for el in ("subDistrict", "subPrice", "subPhone", "subDesc", "subNext"):
+        assert f'id="{el}"' in html, f"submit form missing {el}"
+    assert "function subNext(" in html and '"/api/listing"' in html
+    print("PASS  test_submit_form_native")
 
 
 def test_write_endpoints_require_auth():
@@ -116,9 +131,12 @@ async def _endpoint_tests():
     import aiosqlite
     import app as webapp  # bot/webapp/app.py (WEB_DIR is on sys.path)
     webapp.BOT_TOKEN = "test-token"
+    import config
+    config.ADMIN_IDS = []  # keep the admin notify a no-op (no network) in tests
 
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
+    conn = None
     try:
         conn = await aiosqlite.connect(path)
         conn.row_factory = aiosqlite.Row
@@ -169,15 +187,55 @@ async def _endpoint_tests():
         cur = await conn.execute("SELECT COUNT(*) c FROM listings WHERE id=1")
         assert (await cur.fetchone())["c"] == 1, "archive must be soft (row kept)"
 
+        # ---------- Phase C: submit a listing ----------
+        good = {"deal": "rent", "rooms": "2", "district": "\u0426\u0435\u043d\u0442\u0440", "price": " 450 ",
+                "phone": "+373 60 123 456", "description": "Светлая"}
+        # no auth -> 401
+        st, _ = _jresp(await webapp.api_create_listing(_FakeReq(headers={}, app=app, body=good)))
+        assert st == 401, f"create without auth should be 401, got {st}"
+        # bad deal -> 400
+        st, _ = _jresp(await webapp.api_create_listing(_FakeReq(headers=owner_hdr, app=app, body={**good, "deal": "x"})))
+        assert st == 400, f"bad deal should be 400, got {st}"
+        # price missing -> 400
+        st, _ = _jresp(await webapp.api_create_listing(_FakeReq(headers=owner_hdr, app=app, body={**good, "price": ""})))
+        assert st == 400, f"missing price should be 400, got {st}"
+        # phone missing -> 400
+        st, _ = _jresp(await webapp.api_create_listing(_FakeReq(headers=owner_hdr, app=app, body={**good, "phone": "нет"})))
+        assert st == 400, f"missing phone should be 400, got {st}"
+        # valid -> pending row owned by tg 111
+        st, data = _jresp(await webapp.api_create_listing(_FakeReq(headers=owner_hdr, app=app, body=good)))
+        assert st == 200 and data["status"] == "pending" and data["id"], data
+        cur = await conn.execute("SELECT user_id, status, price FROM listings WHERE id = ?", (data["id"],))
+        r = await cur.fetchone()
+        assert r["user_id"] == 1 and r["status"] == "pending" and r["price"] == 450, dict(r)
+        # rate limit -> 429 once the owner has a pile of fresh pending ads
+        for _ in range(6):
+            await conn.execute(
+                "INSERT INTO listings (user_id, deal, ptype, price, currency, district, status) "
+                "VALUES (1,'rent','apartment',100,'EUR','x','pending')")
+        await conn.commit()
+        st, _ = _jresp(await webapp.api_create_listing(_FakeReq(headers=owner_hdr, app=app, body=good)))
+        assert st == 429, f"rate limit should be 429, got {st}"
+        print("PASS  test_endpoints_phase_c_create")
+
         await conn.close()
         print("PASS  test_endpoints_phase_b")
     finally:
-        os.unlink(path)
+        if conn is not None:
+            try:
+                await conn.close()
+            except Exception:
+                pass
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":
     test_spa_tab_bar()
     test_routes_registered()
+    test_submit_form_native()
     test_write_endpoints_require_auth()
     try:
         asyncio.run(_endpoint_tests())
