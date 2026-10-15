@@ -23,3 +23,6 @@ photos/
 .idea/
 .vscode/
 .DS_Store
+
+# local assets (screens export, etc.) - not source
+*.zip
