@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 import db
 import lemon
+from constants import STATUS_LABELS
 
 log = logging.getLogger("chiriebot.webapp")
 
@@ -185,6 +186,92 @@ async def api_stats(request: web.Request) -> web.Response:
     return web.json_response({"active": (await cur.fetchone())["c"]})
 
 
+# ---------- Phase B: "my listings" + owner lifecycle (auth-gated) ----------
+
+def _my_item(row) -> dict:
+    """Owner-facing view of one ad: status + expiry + a thumbnail, no private fields leaked."""
+    n_photos = len(json.loads(row["photos"] or "[]"))
+    return {
+        "id": row["id"],
+        "deal_label": DEAL_LABELS.get(row["deal"], row["deal"]),
+        "ptype_label": PTYPE_LABELS.get(row["ptype"], row["ptype"]),
+        "price": row["price"],
+        "currency": row["currency"],
+        "district": row["district"],
+        "rooms": row["rooms"],
+        "status": row["status"],
+        "status_label": STATUS_LABELS.get(row["status"], row["status"]),
+        "expires_at": row["expires_at"],
+        "views": row["views"],
+        "boosted": bool(row["boosted_until"] and row["boosted_until"] > time.strftime("%Y-%m-%d %H:%M:%S")),
+        "photos": photo_urls(row["id"], n_photos),
+    }
+
+
+async def api_my_listings(request: web.Request) -> web.Response:
+    """The owner's own ads with their moderation / live / archived state. Requires auth."""
+    viewer = auth_user(request)
+    if not viewer:
+        return web.json_response({"error": "auth_required"}, status=401)
+    conn = request.app["db"]
+    cur = await conn.execute("SELECT id FROM users WHERE tg_id = ?", (viewer["id"],))
+    urow = await cur.fetchone()
+    if not urow:
+        return web.json_response({"items": []})
+    cur = await conn.execute(
+        "SELECT * FROM listings WHERE user_id = ? ORDER BY created_at DESC", (urow["id"],))
+    rows = await cur.fetchall()
+    return web.json_response({"items": [_my_item(r) for r in rows]})
+
+
+# sold and delete are the same soft archive (row kept, "extend" revives it) - mirrors profile.py
+_OWNER_ACTIONS = {"sold": "archived", "delete": "archived", "extend": "active"}
+
+
+async def api_listing_action(request: web.Request) -> web.Response:
+    """One-tap lifecycle from the app: Сдано / Продлить / Удалить. Owner-only, auth-gated."""
+    viewer = auth_user(request)
+    if not viewer:
+        return web.json_response({"error": "auth_required"}, status=401)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    action = body.get("action")
+    if action not in _OWNER_ACTIONS:
+        return web.json_response({"error": "bad_action"}, status=400)
+    listing_id = int(request.match_info["id"])
+    conn = request.app["db"]
+    cur = await conn.execute(
+        "SELECT l.id, l.user_id, u.tg_id FROM listings l JOIN users u ON u.id = l.user_id WHERE l.id = ?",
+        (listing_id,))
+    row = await cur.fetchone()
+    if not row:
+        return web.json_response({"error": "not_found"}, status=404)
+    if str(row["tg_id"]) != str(viewer["id"]):
+        return web.json_response({"error": "not_owner"}, status=403)
+    if action == "extend":
+        await conn.execute(
+            "UPDATE listings SET status = 'active', expires_at = datetime('now', ?), "
+            "updated_at = datetime('now') WHERE id = ?",
+            (f"+{config.LISTING_DAYS} days", listing_id))
+    else:
+        await conn.execute(
+            "UPDATE listings SET status = 'archived', updated_at = datetime('now') WHERE id = ?",
+            (listing_id,))
+    await conn.execute(
+        "INSERT INTO events (name, user_id, listing_id) VALUES (?, ?, ?)",
+        (f"listing_{action}", row["user_id"], listing_id))
+    await conn.commit()
+    cur = await conn.execute("SELECT status, expires_at FROM listings WHERE id = ?", (listing_id,))
+    new = await cur.fetchone()
+    return web.json_response({
+        "ok": True, "id": listing_id, "status": new["status"],
+        "status_label": STATUS_LABELS.get(new["status"], new["status"]),
+        "expires_at": new["expires_at"],
+    })
+
+
 async def webhook_lemonsqueezy(request: web.Request) -> web.Response:
     """Card payment inbox. No init-data auth: the HMAC signature of the raw body is the proof.
 
@@ -223,6 +310,8 @@ async def app_factory() -> web.Application:
     app.router.add_get("/api/listing/{id}", api_listing)
     app.router.add_post("/api/listing/{id}/contact", api_contact)
     app.router.add_get("/api/stats", api_stats)
+    app.router.add_get("/api/my/listings", api_my_listings)
+    app.router.add_post("/api/listing/{id}/action", api_listing_action)
     app.router.add_post("/webhook/lemonsqueezy", webhook_lemonsqueezy)
     os.makedirs(PHOTOS_DIR, exist_ok=True)
     app.router.add_static("/photos/", PHOTOS_DIR)

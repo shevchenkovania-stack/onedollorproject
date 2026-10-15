@@ -85,6 +85,25 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-ra
 .stub b { display: block; font-size: 19px; margin-bottom: 8px; }
 .stub p { color: var(--hint); font-size: 14px; line-height: 1.5; max-width: 300px; margin: 0 auto 18px; }
 .stub .btn { max-width: 320px; margin: 0 auto; }
+/* Phase B: my listings */
+.mywrap { padding: 14px 16px; }
+.myhead { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.myhead b { font-size: 18px; }
+.myhead .count { font-size: 12px; color: var(--hint); margin-left: auto; }
+.myitem { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px; margin-bottom: 12px; }
+.myitem .top { display: flex; align-items: flex-start; gap: 8px; }
+.myitem .ttl { font-weight: 700; font-size: 15px; }
+.myitem .sub { color: var(--hint); font-size: 13px; margin-top: 2px; }
+.pill { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; margin-left: auto; white-space: nowrap; }
+.pill.active { color: #0a6e63; background: color-mix(in srgb, var(--brand) 14%, transparent); }
+.pill.pending { color: #8a5a00; background: #fbeecb; }
+.pill.archived { color: #5b6672; background: #eceff2; }
+.pill.rejected { color: #a11212; background: #f9dcdc; }
+.myacts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.mabtn { flex: 1; min-width: 84px; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; padding: 9px 10px; font-size: 13px; font-weight: 600; cursor: pointer; text-align: center; font-family: inherit; }
+.mabtn:active { transform: scale(.97); }
+.mabtn.primary { background: var(--brand); color: #fff; border-color: transparent; }
+.mabtn[disabled] { opacity: .5; pointer-events: none; }
 </style>
 </head>
 <body>
@@ -144,11 +163,14 @@ select, input[type=number] { flex: 1; min-width: 0; padding: 9px 11px; border-ra
 </div>
 
 <div class="view" id="viewMy">
-  <div class="stub">
-    <div class="stubic">📋</div>
-    <b>Мои объявления</b>
-    <p>Здесь появятся твои объекты, их статус и кнопки Сдано / Продлить / Удалить.</p>
-    <button class="btn" onclick="toBot('my')">📋 Открыть в боте</button>
+  <div class="mywrap">
+    <div class="myhead"><b>Мои объявления</b><span class="count" id="myCount"></span></div>
+    <div class="grid" id="myList"></div>
+    <div class="empty" id="myEmpty" style="display:none">
+      <b>Пока пусто</b>
+      <p>Ты ещё не разместил объявления. Это бесплатно и занимает пару минут.</p>
+      <div style="margin-top:16px"><button class="btn" onclick="openSubmit()">➕ Подать объявление</button></div>
+    </div>
   </div>
 </div>
 
@@ -236,6 +258,57 @@ function toBot(startParam) {
   const a = document.createElement("a");
   a.href = url; a.target = "_blank"; a.rel = "noopener";
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// ---- Phase B: my listings (native «Мои» tab) ------------------------------
+function openSubmit() { showView("submit"); }   // becomes the native form in Phase C
+
+async function renderMy() {
+  const list = $("myList"), empty = $("myEmpty");
+  if (!MY_ID) { list.innerHTML = ""; empty.style.display = "block"; $("myCount").textContent = ""; return; }
+  let items;
+  try { items = (await api("/api/my/listings")).items; }
+  catch (e) { list.innerHTML = ""; empty.style.display = "block"; return; }
+  $("myCount").textContent = items.length ? items.length + " объявл." : "";
+  if (!items.length) { list.innerHTML = ""; empty.style.display = "block"; return; }
+  empty.style.display = "none";
+  list.innerHTML = items.map(myCardHtml).join("");
+}
+
+function myCardHtml(it) {
+  const meta = [it.price + " " + esc(it.currency), esc(it.district || ""), it.rooms ? it.rooms + "к" : ""]
+    .filter(Boolean).join(" · ");
+  const exp = (it.status === "active" && it.expires_at) ? `<div class="sub">до ✂ ${esc(it.expires_at.slice(0, 10))}</div>` : "";
+  return `<div class="myitem">
+    <div class="top"><div><div class="ttl">#${it.id} · ${esc(it.deal_label)} ${esc(it.ptype_label)}</div>
+    <div class="sub">${meta}</div>${exp}</div>
+    <span class="pill ${it.status}">${esc(it.status_label)}</span></div>
+    <div class="myacts">${myActions(it)}</div></div>`;
+}
+
+function myActions(it) {
+  if (it.status === "pending") return `<button class="mabtn" onclick="notice('На модерации. Как только одобрим — объявление появится в поиске.')">🕒 Ждёт модерации</button>`;
+  if (it.status === "rejected") return `<button class="mabtn" onclick="toBot('add')">✏️ Подать заново</button>`;
+  return `<button class="mabtn" onclick="myAction(${it.id},'sold',this)">✅ Сдано</button>`
+       + `<button class="mabtn primary" onclick="myAction(${it.id},'extend',this)">🔄 Продлить</button>`
+       + `<button class="mabtn" onclick="myAction(${it.id},'delete',this)">🗑 Удалить</button>`;
+}
+
+function notice(msg) { if (tg?.showAlert) tg.showAlert(msg); else alert(msg); }
+
+async function myAction(id, action, btn) {
+  if (action === "delete" && !confirm("Убрать объявление с доски? Его можно вернуть кнопкой «Продлить».")) return;
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api(`/api/listing/${id}/action`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }),
+    });
+    if (action === "extend" && tg?.showAlert) tg.showAlert("Продлено" + (r.expires_at ? " до " + r.expires_at.slice(0, 10) : ""));
+    await renderMy();
+  } catch (e) {
+    if (btn) btn.disabled = false;
+    if (tg?.showAlert) tg.showAlert("Не удалось выполнить действие");
+  }
 }
 
 // owner-set public channels -> (button label, url builder). mirrors keyboards.py:_CONTACT_CHANNELS
