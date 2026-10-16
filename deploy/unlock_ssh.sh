@@ -24,9 +24,14 @@ fi
 
 FILE=/etc/fail2ban/jail.d/imobiliare.conf
 
-# Preserve any addresses we whitelisted before, so a changing IP history stays allowed.
-PREV_IGNORE=$(awk -F= '/^ignoreip/{print $2}' "$FILE" 2>/dev/null | tr -s ' ')
-echo "=== previously whitelisted: ${PREV_IGNORE:-none} ==="
+# Preserve every address we whitelisted before, so a changing IP history (office + home)
+# stays allowed. Then rebuild the line de-duplicated: localhost + prior addresses + this
+# session's IP. Without the dedup, each re-run re-appends the base and the current IP and
+# the line grows with duplicates.
+PREV_IGNORE=$(awk -F= '/^ignoreip/{print $2}' "$FILE" 2>/dev/null)
+IGNORE=$( { echo "127.0.0.1/8 ::1"; echo "$PREV_IGNORE"; echo "$ME"; } \
+  | tr -s ' \t' '\n' | awk 'NF && !seen[$0]++' | tr '\n' ' ')
+echo "=== final whitelist: ${IGNORE} ==="
 
 cat > "$FILE" <<EOF
 # managed by deploy/unlock_ssh.sh - owner whitelist + deploy-friendly limits
@@ -39,7 +44,7 @@ maxretry = 30
 findtime = 10m
 bantime  = 30m
 # never ban localhost or any address the owners have connected from
-ignoreip = 127.0.0.1/8 ::1 ${PREV_IGNORE} ${ME}
+ignoreip = ${IGNORE}
 EOF
 
 systemctl restart fail2ban
