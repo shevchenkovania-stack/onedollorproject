@@ -42,7 +42,9 @@ backend  = systemd
 # interactive deploys open many ssh/scp connections fast; only stop real brute force
 maxretry = 30
 findtime = 10m
-bantime  = 30m
+# short ban: a whitelisted owner IP is never banned at all, and even an unexpected NEW
+# address (office/home DHCP changed) self-heals in 10 min instead of locking us out.
+bantime  = 10m
 # never ban localhost or any address the owners have connected from
 ignoreip = ${IGNORE}
 EOF
