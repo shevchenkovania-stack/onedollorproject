@@ -232,7 +232,7 @@ select, input[type=number], input[type=tel], input[type=text] { flex: 1; min-wid
         <button type="button" class="btn sec" onclick="pickPhotos()">📸 Выбрать фото</button>
         <div class="thumbs" id="subThumbs"></div>
       </div>
-      <div class="fnav"><button type="button" class="btn sec" id="subBack" onclick="subBack()" style="display:none">← Назад</button><button type="button" class="btn" id="subNext" onclick="subNext()">Далее →</button></div>
+      <div class="fnav"><button type="button" class="btn sec" id="subBack" onclick="window.subBack()" style="display:none">← Назад</button><button type="button" class="btn" id="subNext" onclick="window.subNext()">Далее →</button></div>
       <div class="ferr" id="subErr"></div>
     </form>
   </div>
@@ -677,9 +677,10 @@ function applyFocus() {
     const note = document.createElement("div");
     note.id = "focusNote"; note.className = "flabel";
     note.style.cssText = "color:var(--hint);font-weight:500;line-height:1.5";
-    note.textContent = "Формат доски: " + (FOCUS_ROOMS === "1" ? "однушки" : "квартиры")
-      + (FOCUS_DEAL === "rent" ? " в аренду" : FOCUS_DEAL === "sale" ? " в продажу" : "")
-      + " в Кишинёве · от хозяина · без агентов.";
+    const what = (FOCUS_ROOMS === "1" ? "однушку" : "квартиру")
+      + (FOCUS_DEAL === "rent" ? " в аренду" : FOCUS_DEAL === "sale" ? " в продажу" : "");
+    note.textContent = "Ты размещаешь " + what + " в Кишинёве · от хозяина · без агентов. "
+      + "Это уже выбрано — жми «Далее» и укажи район и цену.";
     s1.prepend(note);
   }
   // reposition the copy: from "board" to a calm, single-purpose promise.
@@ -691,7 +692,9 @@ function applyFocus() {
   if (footer) footer.innerHTML = "Găsește Casa · " + (FOCUS_ROOMS === "1" ? "однушки" : "жильё")
     + (FOCUS_DEAL === "rent" ? " в аренду" : "") + " в Кишинёве · от проверенных хозяев · без комиссии"
     + "<br><span onclick=\"openSubmit()\" style=\"text-decoration:underline;cursor:pointer\">➕ Разместить своё бесплатно →</span>";
-  const stp1 = document.querySelector('.steps .stp[data-s="1"]'); if (stp1) stp1.textContent = "1 · Формат";
+  const stp1 = document.querySelector('.steps .stp[data-s="1"]');
+  if (stp1) stp1.textContent = "1 · " + (FOCUS_ROOMS === "1" ? "Однушка" : "Квартира")
+    + (FOCUS_DEAL === "rent" ? " · аренда" : FOCUS_DEAL === "sale" ? " · продажа" : "");
   document.title = "Găsește Casa · " + (FOCUS_ROOMS === "1" ? "Однушки" : "Жильё")
     + (FOCUS_DEAL === "rent" ? " в аренду" : "") + " в Кишинёве · без агентов";
 }
