@@ -119,10 +119,11 @@ def _handler_body(src: str, name: str) -> str:
 
 class _FakeReq:
     """Minimal stand-in for aiohttp.web.Request: only what the handlers touch."""
-    def __init__(self, headers=None, app=None, match_info=None, body=None, post=None):
+    def __init__(self, headers=None, app=None, match_info=None, body=None, post=None, query=None):
         self.headers = headers or {}
         self.app = app or {}
         self.match_info = match_info or {}
+        self.query = query or {}
         self._body = body
         self._post = post
 
@@ -441,6 +442,68 @@ async def _photo_tests():
         shutil.rmtree(pdir, ignore_errors=True)
 
 
+async def _focus_lock_tests():
+    """The focus lock narrows the WHOLE board: search shows only the focus ad, a sale upload is
+    rejected, and a hand-crafted ?deal=sale cannot leak non-focus ads back."""
+    import aiosqlite
+    import app as webapp
+    import config
+    saved = (config.FOCUS_DEAL, config.FOCUS_ROOMS)
+    config.FOCUS_DEAL, config.FOCUS_ROOMS = "rent", "1"
+    webapp.BOT_TOKEN = "test-token"
+    config.ADMIN_IDS = []
+
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    conn = None
+    try:
+        conn = await aiosqlite.connect(path)
+        conn.row_factory = aiosqlite.Row
+        import db
+        await db.ensure_schema(conn)
+        await conn.execute("INSERT INTO users (tg_id, username, first_name) VALUES (111,'o','O')")
+        for deal, rooms, price in (("rent", 1, 300), ("rent", 2, 500), ("sale", 1, 40000)):
+            await conn.execute(
+                "INSERT INTO listings (user_id, deal, ptype, rooms, price, currency, district, "
+                "status, photos, expires_at) VALUES (1,?, 'apartment',?,?, 'EUR','Centr','active','[]',"
+                "datetime('now','+30 days'))", (deal, rooms, price))
+        await conn.commit()
+        app = {"db": conn}
+        owner_hdr = {"X-Init-Data": _signed_init_data(111, "test-token")}
+
+        # 1. default search -> only the rent one-bedroom survives the lock
+        st, data = _jresp(await webapp.api_listings(_FakeReq(app=app, query={})))
+        assert st == 200 and data["total"] == 1 and data["items"][0]["deal"] == "rent" \
+            and data["items"][0]["rooms"] == 1, (st, data)
+        # 2. a crafted ?deal=sale is overridden by the lock, not honoured
+        st, data = _jresp(await webapp.api_listings(_FakeReq(app=app, query={"deal": "sale"})))
+        assert data["total"] == 1 and data["items"][0]["deal"] == "rent", (st, data)
+        # 3. submitting a sale ad is refused outright
+        st, data = _jresp(await webapp.api_create_listing(
+            _FakeReq(headers=owner_hdr, app=app, body={"deal": "sale", "rooms": "1",
+                    "district": "Centr", "price": "40000", "phone": "+373 60 123 456"})))
+        assert st == 400 and data.get("error") == "deal_not_accepted", (st, data)
+        # 4. a legit rent upload with the wrong room count is coerced into the focus (1)
+        st, data = _jresp(await webapp.api_create_listing(
+            _FakeReq(headers=owner_hdr, app=app, body={"deal": "rent", "rooms": "3",
+                    "district": "Centr", "price": "320", "phone": "+373 60 123 456"})))
+        assert st == 200 and data["status"] == "pending", (st, data)
+        cur = await conn.execute("SELECT rooms FROM listings WHERE id=?", (data["id"],))
+        assert (await cur.fetchone())["rooms"] == 1, "rooms must be locked to the focus value"
+        print("PASS  test_focus_lock")
+    finally:
+        config.FOCUS_DEAL, config.FOCUS_ROOMS = saved
+        if conn is not None:
+            try:
+                await conn.close()
+            except Exception:
+                pass
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
 if __name__ == "__main__":
     test_spa_tab_bar()
     test_routes_registered()
@@ -460,4 +523,8 @@ if __name__ == "__main__":
         asyncio.run(_photo_tests())
     except ModuleNotFoundError as e:
         print(f"SKIP  test_endpoints_phase_d_photos ({e.name} not installed locally)")
+    try:
+        asyncio.run(_focus_lock_tests())
+    except ModuleNotFoundError as e:
+        print(f"SKIP  test_focus_lock ({e.name} not installed locally)")
     print("\nwebapp smoke passed")

@@ -267,6 +267,9 @@ tg?.ready(); tg?.expand();
 const INIT = tg?.initData || "";
 const MY_ID = tg?.initDataUnsafe?.user?.id || 0;
 const BOT_URL = "{{BOT_URL}}"; // replaced by webapp/app.py on serve (config-driven, no hardcode)
+// focus lock (replaced by app.py from config.FOCUS_DEAL / FOCUS_ROOMS; "" = full board):
+const FOCUS_DEAL = "{{FOCUS_DEAL}}";    // "rent" -> rentals only
+const FOCUS_ROOMS = "{{FOCUS_ROOMS}}";  // "1"    -> one-bedroom only
 const DISTRICTS = ["Центр","Ботаника","Буюканы","Рышкановка","Чеканы","Дурлешты","Кодры","Стэучень","Кондрица","Бачой","Криково","Сынджера","Тохатин","Бубуечь","Другое"];
 const DEAL_LABEL = { rent: "Аренда", sale: "Продажа" };
 
@@ -653,7 +656,48 @@ $("district").innerHTML += DISTRICTS.map(d=>`<option>${d}</option>`).join("");
 }));
 $("more").addEventListener("click", () => { state.page++; load(true); });
 
+// ---------- focus lock: narrow the whole app to one situation (rent · one-bedroom) ----------
+function _hideWithLabel(el) {
+  if (!el) return;
+  const lab = el.previousElementSibling;
+  if (lab && lab.classList.contains("flabel")) lab.style.display = "none";
+  el.style.display = "none";
+}
+function applyFocus() {
+  if (!FOCUS_DEAL && !FOCUS_ROOMS) return;
+  // search: the hidden filters are still enforced server-side; lock the client state too.
+  if (FOCUS_DEAL) { state.deal = FOCUS_DEAL; _hide($("dealChips")); }
+  if (FOCUS_ROOMS) { state.rooms = FOCUS_ROOMS; _hide($("rooms")); _hide($("ptype")); }
+  // submit: no deal/room choice to make - it is fixed. hide the selectors and their labels.
+  if (FOCUS_DEAL) { SUB.deal = FOCUS_DEAL; _hideWithLabel($("dealSel")); }
+  if (FOCUS_ROOMS) { SUB.rooms = FOCUS_ROOMS; _hideWithLabel($("roomSel")); }
+  const s1 = document.querySelector('#subForm .fstep[data-step="1"]');
+  if (s1 && !$("focusNote")) {
+    const note = document.createElement("div");
+    note.id = "focusNote"; note.className = "flabel";
+    note.style.cssText = "color:var(--hint);font-weight:500;line-height:1.5";
+    note.textContent = "Формат доски: " + (FOCUS_ROOMS === "1" ? "однушки" : "квартиры")
+      + (FOCUS_DEAL === "rent" ? " в аренду" : FOCUS_DEAL === "sale" ? " в продажу" : "")
+      + " в Кишинёве · от хозяина · без агентов.";
+    s1.prepend(note);
+  }
+  // reposition the copy: from "board" to a calm, single-purpose promise.
+  const tag = document.querySelector("h1 .tag"); if (tag) tag.textContent = "Без агентов";
+  const cta = document.querySelector(".addcta");
+  if (cta) cta.textContent = "➕ " + (FOCUS_ROOMS === "1" ? "Сдам однушку" : "Разместить")
+    + (FOCUS_DEAL === "rent" ? " в аренду" : "") + " · бесплатно, 2 минуты";
+  const footer = document.querySelector(".footer");
+  if (footer) footer.innerHTML = "Găsește Casa · " + (FOCUS_ROOMS === "1" ? "однушки" : "жильё")
+    + (FOCUS_DEAL === "rent" ? " в аренду" : "") + " в Кишинёве · от проверенных хозяев · без комиссии"
+    + "<br><span onclick=\"openSubmit()\" style=\"text-decoration:underline;cursor:pointer\">➕ Разместить своё бесплатно →</span>";
+  const stp1 = document.querySelector('.steps .stp[data-s="1"]'); if (stp1) stp1.textContent = "1 · Формат";
+  document.title = "Găsește Casa · " + (FOCUS_ROOMS === "1" ? "Однушки" : "Жильё")
+    + (FOCUS_DEAL === "rent" ? " в аренду" : "") + " в Кишинёве · без агентов";
+}
+function _hide(el){ if (el) el.style.display = "none"; }
+
 if (location.hash.startsWith("#listing=")) openDetail(+location.hash.split("=")[1]);
+applyFocus();
 refreshSubs();
 load();
 </script>

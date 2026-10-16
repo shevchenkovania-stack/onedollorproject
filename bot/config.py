@@ -20,6 +20,13 @@ PHOTOS_DIR = os.getenv("PHOTOS_DIR", "/opt/imobiliare/data/photos")
 
 DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", "EUR")
 
+# Positioning focus: be ONE useful service instead of "yet another board". Empty env keeps the
+# full board (any deal, any room count); on prod we lock to one human situation:
+# FOCUS_DEAL=rent + FOCUS_ROOMS=1 -> "one-bedroom rentals in Chisinau, from owners".
+# This is a display+submission lock, not a data delete: the code path for sale/other rooms stays.
+FOCUS_DEAL = os.getenv("FOCUS_DEAL", "").strip()          # "rent" | "sale" | "" (off)
+FOCUS_ROOMS = os.getenv("FOCUS_ROOMS", "").strip()        # "1" | "" (off)
+
 # Stars price of one Boost. 400 Stars ~= $5.20 of reward at the documented $0.013/Star, i.e. the
 # same money the card rail costs. 50 (the first value we shipped) was ~$0.65: a ten-times hole.
 BOOST_STARS = int(os.getenv("BOOST_STARS", "400"))

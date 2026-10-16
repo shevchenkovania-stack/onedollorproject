@@ -111,15 +111,24 @@ def row_to_item(row, with_detail: bool = False) -> dict:
 
 # ---------- handlers ----------
 
-async def index(request: web.Request) -> web.StreamResponse:
+async def index(request: web.Request) -> web.Response:
     path = os.path.join(os.path.dirname(__file__), "static", "index.html")
     with open(path, encoding="utf-8") as f:
-        html = f.read().replace("{{BOT_URL}}", config.BOT_URL or "https://t.me/gaseste_casa_bot")
+        html = (f.read()
+                .replace("{{BOT_URL}}", config.BOT_URL or "https://t.me/gaseste_casa_bot")
+                .replace("{{FOCUS_DEAL}}", config.FOCUS_DEAL)
+                .replace("{{FOCUS_ROOMS}}", config.FOCUS_ROOMS))
     return web.Response(text=html, content_type="text/html", charset="utf-8")
 
 
 async def api_listings(request: web.Request) -> web.Response:
-    q = request.query
+    q = dict(request.query)
+    # focus lock: when the board is narrowed, the visible set is the focus regardless of what
+    # the client sent - a hand-crafted ?deal=sale must not leak non-focus ads back into search.
+    if config.FOCUS_DEAL:
+        q["deal"] = config.FOCUS_DEAL
+    if config.FOCUS_ROOMS:
+        q["rooms"] = config.FOCUS_ROOMS
     where = "status = 'active'"
     args: list = []
     for col, key in (("deal", "deal"), ("ptype", "ptype"), ("district", "district")):
@@ -351,6 +360,10 @@ async def api_create_listing(request: web.Request) -> web.Response:
     deal = str(body.get("deal") or "").strip()
     if deal not in ("rent", "sale"):
         return web.json_response({"error": "bad_deal"}, status=400)
+    # focus lock: the board only accepts its own situation, so a hand-crafted sale upload
+    # cannot slip a non-focus ad past the (already hidden) UI selector.
+    if config.FOCUS_DEAL and deal != config.FOCUS_DEAL:
+        return web.json_response({"error": "deal_not_accepted"}, status=400)
     district = str(body.get("district") or "").strip()[:80]
     if not district:
         return web.json_response({"error": "district_required"}, status=400)
@@ -370,6 +383,10 @@ async def api_create_listing(request: web.Request) -> web.Response:
     description = str(body.get("description") or "")[:2000]
     rooms_raw = str(body.get("rooms") or "").strip()
     rooms = int(rooms_raw) if rooms_raw.isdigit() else None
+    # focus lock: a narrowed board is one room count - every upload lands there, whatever the
+    # (already hidden) selector sent, so the feed stays consistent.
+    if config.FOCUS_ROOMS:
+        rooms = int(config.FOCUS_ROOMS)
     ptype = (str(body.get("ptype") or "").strip() or "apartment")[:16]
     currency = (str(body.get("currency") or config.DEFAULT_CURRENCY or "EUR").strip() or "EUR")[:8]
 
