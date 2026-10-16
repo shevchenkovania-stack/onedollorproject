@@ -135,8 +135,11 @@ select, input[type=number], input[type=tel], input[type=text] { flex: 1; min-wid
 .fnav .btn { flex: 1; }
 .ferr { color: #a11212; font-size: 13px; text-align: center; margin-top: 12px; min-height: 18px; }
 .flabel .hint { color: var(--hint); font-weight: 400; font-size: 12px; }
-.thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.thumbs img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); }
+.thumbs { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.thumbs .th { position: relative; }
+.thumbs img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); display: block; }
+.thumbs .thx { position: absolute; top: -7px; right: -7px; width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 2px solid #fff; background: #a11212; color: #fff; font-size: 12px; line-height: 18px; cursor: pointer; }
+#photoCount { color: var(--brand, #1a73e8); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -227,9 +230,9 @@ select, input[type=number], input[type=tel], input[type=text] { flex: 1; min-wid
         <textarea id="subDesc" rows="4" placeholder="Светлая квартира, рядом парк, заезд с телефона... (необязательно)"></textarea>
         <div class="flabel">Телефон для связи</div>
         <input type="tel" id="subPhone" inputmode="tel" placeholder="+373 60 123 456">
-        <div class="flabel">Фото <span class="hint">необязательно · до 10 · jpg/png</span></div>
+        <div class="flabel">Фото <span class="hint">необязательно · до 10 · jpg/png · <b id="photoCount"></b></span></div>
         <input type="file" id="subPhotos" accept="image/*" multiple hidden>
-        <button type="button" class="btn sec" onclick="pickPhotos()">📸 Выбрать фото</button>
+        <button type="button" class="btn sec" id="pickBtn" onclick="pickPhotos()">📸 Выбрать фото</button>
         <div class="thumbs" id="subThumbs"></div>
       </div>
       <div class="fnav"><button type="button" class="btn sec" id="subBack" onclick="window.subBack()" style="display:none">← Назад</button><button type="button" class="btn" id="subNext" onclick="window.subNext()">Далее →</button></div>
@@ -490,7 +493,7 @@ async function subNext() {
 async function subSend() {
   const btn = $("subNext"); const wasLabel = btn.textContent;
   btn.disabled = true; btn.textContent = "Отправка…"; subErr("");
-  const files = [...($("subPhotos").files || [])].slice(0, 10);
+  const files = PHOTO_FILES.slice(0, PHOTO_MAX);
   try {
     const r = await api("/api/listing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
       deal: SUB.deal, ptype: "apartment", rooms: SUB.rooms, district: SUB.district, price: SUB.price,
@@ -517,23 +520,42 @@ async function subSend() {
   } finally { btn.disabled = false; btn.textContent = wasLabel; }
 }
 
-function pickPhotos() { $("subPhotos").click(); }
+const PHOTO_MAX = 10;
+let PHOTO_FILES = [];   // source of truth: survives re-picking, unlike <input>.files which the browser replaces
+
+function pickPhotos() {
+  if (PHOTO_FILES.length >= PHOTO_MAX) { notice("Максимум 10 фото — убери лишнее, чтобы добавить новое."); return; }
+  $("subPhotos").click();
+}
+function onPickPhotos(e) {
+  [...(e.target.files || [])].forEach(f => { if (PHOTO_FILES.length < PHOTO_MAX) PHOTO_FILES.push(f); });
+  e.target.value = "";   // reset the input so the same file can be chosen again; PHOTO_FILES already holds them
+  renderThumbs();
+}
 function renderThumbs() {
   const box = $("subThumbs"); box.innerHTML = "";
-  [...($("subPhotos").files || [])].slice(0, 10).forEach(f => {
-    const url = URL.createObjectURL(f);
-    const img = document.createElement("img"); img.src = url;
+  PHOTO_FILES.forEach((f, i) => {
+    const cell = document.createElement("div"); cell.className = "th";
+    const img = document.createElement("img");
+    const url = URL.createObjectURL(f); img.src = url;
     img.onload = () => URL.revokeObjectURL(url);
-    box.appendChild(img);
+    const x = document.createElement("button");
+    x.type = "button"; x.className = "thx"; x.setAttribute("aria-label", "Удалить фото"); x.textContent = "✕";
+    x.onclick = () => { PHOTO_FILES.splice(i, 1); renderThumbs(); };
+    cell.appendChild(img); cell.appendChild(x); box.appendChild(cell);
   });
+  const n = PHOTO_FILES.length;
+  $("photoCount").textContent = n ? n + "/" + PHOTO_MAX : "";
+  const btn = $("pickBtn");
+  if (btn) btn.textContent = n >= PHOTO_MAX ? "Достигнут лимит 10" : (n ? "➕ Добавить фото" : "📸 Выбрать фото");
 }
-$("subPhotos").addEventListener("change", renderThumbs);
+$("subPhotos").addEventListener("change", onPickPhotos);
 
 function subReset() {
   Object.assign(SUB, { step: SUB_START, deal: "rent", rooms: "1", district: "", price: "", description: "", phone: "" });
   selectChip("#dealSel", "data-deal", "rent"); selectChip("#roomSel", "data-rooms", "1");
   $("subDistrict").value = ""; $("subPrice").value = ""; $("subDesc").value = ""; $("subPhone").value = "";
-  $("subPhotos").value = ""; $("subThumbs").innerHTML = "";
+  $("subPhotos").value = ""; PHOTO_FILES = []; renderThumbs();
   $("curTag").textContent = "€ /мес";
 }
 
