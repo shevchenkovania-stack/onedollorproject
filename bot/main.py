@@ -76,7 +76,7 @@ async def main() -> None:
     if notify:
         for admin_id in config.ADMIN_IDS:
             try:
-                await bot.send_message(admin_id, "\u2705 Găsește Casa запущен и готов к работе.")
+                await bot.send_message(admin_id, "\u2705 Однушка.md запущен и готов к работе.")
             except Exception:
                 pass
 

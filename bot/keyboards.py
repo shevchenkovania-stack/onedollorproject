@@ -78,10 +78,10 @@ def share_url(listing_id: int | None = None) -> str | None:
         return None
     target = f"{config.BOT_URL}?start=share_{listing_id}" if listing_id else config.BOT_URL
     if listing_id:
-        text = (f"Объект #{listing_id} на Găsește Casa — квартиры и дома в Кишинёве: "
+        text = (f"Объект #{listing_id} на Однушка.md — квартиры и дома в Кишинёве: "
                 "без комиссии, контакты на карточке, размещение бесплатное")
     else:
-        text = ("Găsește Casa — бесплатная доска аренды и продажи жилья в Кишинёве прямо в Telegram: "
+        text = ("Однушка.md — бесплатная доска аренды и продажи жилья в Кишинёве прямо в Telegram: "
                 "объявление публикуется за 2 минуты")
     return "https://t.me/share/url?url=" + quote(target, safe="") + "&text=" + quote(text)
 

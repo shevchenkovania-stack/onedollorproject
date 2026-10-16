@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>Găsește Casa · Аренда квартир и продажа в Кишинёве · Chirie Chișinău · без комиссии</title>
+<title>Однушка.md · Аренда однушек в Кишинёве · chirie Chișinău · без комиссии</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
 :root {
@@ -146,14 +146,14 @@ select, input[type=number], input[type=tel], input[type=text] { flex: 1; min-wid
 <div class="view on" id="viewSearch">
 <header>
   <div class="brand">
-    <svg class="logo" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Găsește Casa">
+    <svg class="logo" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Однушка.md">
       <defs><linearGradient id="gc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0fb2a0"/><stop offset="1" stop-color="#0a6e63"/></linearGradient></defs>
       <rect width="64" height="64" rx="14" fill="url(#gc)"/>
       <path d="M32 15 L49 30 H45 V47 a2 2 0 0 1-2 2 H21 a2 2 0 0 1-2-2 V30 H15 Z" fill="#fff"/>
       <circle cx="32" cy="34" r="4.2" fill="#0a6e63"/>
       <path d="M30.4 37 h3.2 l1.6 8 h-6.4 Z" fill="#0a6e63"/>
     </svg>
-    <h1>Găsește Casa <span class="tag">Доска</span> <span class="count" id="count"></span></h1>
+    <h1>Однушка.md <span class="tag">Доска</span> <span class="count" id="count"></span></h1>
   </div>
   <button class="addcta" onclick="openSubmit()">➕ Добавить объявление · бесплатно, 2 минуты</button>
   <div class="searchbar">
@@ -199,7 +199,7 @@ select, input[type=number], input[type=tel], input[type=text] { flex: 1; min-wid
   <div style="margin-top:18px"><button class="btn" onclick="openSubmit()">➕ Разместить объявление</button></div>
 </div>
 <button class="btn sec" id="more" style="display:none; margin:0 16px">Показать ещё</button>
-<div class="footer">Găsește Casa · аренда и продажа · без комиссии · контакт всегда на карточке<br><span onclick="openSubmit()" style="text-decoration:underline;cursor:pointer">➕ Добавить своё объявление бесплатно →</span></div>
+<div class="footer">Однушка.md · аренда и продажа · без комиссии · контакт всегда на карточке<br><span onclick="openSubmit()" style="text-decoration:underline;cursor:pointer">➕ Добавить своё объявление бесплатно →</span></div>
 </div><!-- /viewSearch -->
 
 <div class="view" id="viewSubmit">
@@ -512,7 +512,7 @@ async function subSend() {
     // A 401 means no signed initData (opened as a link, not through the bot button). A quiet red
     // line at the page bottom reads as "nothing happens", so pop an alert that states the fix.
     if (e && e.message === "401") {
-      notice("Открой Găsește Casa через бота: @gaseste_casa_bot → кнопка «🏠 Искать квартиры». Только так Telegram даёт авторизацию для отправки.");
+      notice("Открой Однушка.md через бота: @gaseste_casa_bot → кнопка «🏠 Искать квартиры». Только так Telegram даёт авторизацию для отправки.");
       subErr("Нет авторизации Telegram. Нажми «🏠 Искать квартиры» в меню бота и повтори.");
     } else {
       subErr("Не удалось отправить. Попробуй ещё раз.");
@@ -742,13 +742,13 @@ function applyFocus() {
   if (cta) cta.textContent = "➕ " + (FOCUS_ROOMS === "1" ? "Сдам однушку" : "Разместить")
     + (FOCUS_DEAL === "rent" ? " в аренду" : "") + " · бесплатно, 2 минуты";
   const footer = document.querySelector(".footer");
-  if (footer) footer.innerHTML = "Găsește Casa · " + (FOCUS_ROOMS === "1" ? "однушки" : "жильё")
+  if (footer) footer.innerHTML = "Однушка.md · " + (FOCUS_ROOMS === "1" ? "однушки" : "жильё")
     + (FOCUS_DEAL === "rent" ? " в аренду" : "") + " в Кишинёве · от проверенных хозяев · без комиссии"
     + "<br><span onclick=\"openSubmit()\" style=\"text-decoration:underline;cursor:pointer\">➕ Разместить своё бесплатно →</span>";
   const stp1 = document.querySelector('.steps .stp[data-s="1"]');
   if (stp1 && !fullLock) stp1.textContent = "1 · " + (FOCUS_ROOMS === "1" ? "Однушка" : "Квартира")
     + (FOCUS_DEAL === "rent" ? " · аренда" : FOCUS_DEAL === "sale" ? " · продажа" : "");
-  document.title = "Găsește Casa · " + (FOCUS_ROOMS === "1" ? "Однушки" : "Жильё")
+  document.title = "Однушка.md · " + (FOCUS_ROOMS === "1" ? "Однушки" : "Жильё")
     + (FOCUS_DEAL === "rent" ? " в аренду" : "") + " в Кишинёве · без агентов";
 }
 function _hide(el){ if (el) el.style.display = "none"; }

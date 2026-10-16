@@ -57,7 +57,7 @@ def _placeholder(text: str, idx: int) -> bytes:
     for i, line in enumerate(sub.split("\n")):
         bbox2 = d.textbbox((0, 0), line, font=f2)
         d.text(((800 - bbox2[2] + bbox2[0]) / 2, 320 + i * 32), line, fill="white", font=f2)
-    d.text((30, 540), "Găsește Casa · TEST DATA", fill=(255, 255, 255), font=f2)
+    d.text((30, 540), "Однушка.md · TEST DATA", fill=(255, 255, 255), font=f2)
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=85)
     return buf.getvalue()
