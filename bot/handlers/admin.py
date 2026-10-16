@@ -58,8 +58,10 @@ async def moderate(cb: CallbackQuery, bot: Bot) -> None:
     owner = await db.get_user_by_id(row["user_id"])
     if owner:
         if status == "active":
+            # where the ad is actually visible: only claim the channel when one is wired up
+            where = "в поиске и в канале" if config.CHANNEL_ID else "в поиске и в приложении"
             note = (f"\u2705 Твоё объявление <b>#{listing_id}</b> одобрено и опубликовано!\n"
-                    "Его уже видят в поиске и в канале. Хочешь быть первым? Жми Boost \U0001F680")
+                    f"Его уже видят {where}. Хочешь быть первым? Жми Boost \U0001F680")
             if first_free:
                 note += (f"\n\n\U0001F381 Первое объявление — неделя бесплатно. Дальше продление "
                          f"по <b>{config.PRICE_LISTING_MDL}</b> лей за неделю.")
