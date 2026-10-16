@@ -44,22 +44,35 @@ PTYPE_LABELS = {"apartment": "Квартира", "house": "Дом", "room": "К�
 # ---------- Telegram WebApp initData validation (deterministic, per docs) ----------
 
 def validate_init_data(init_data: str) -> dict | None:
-    """Return authed user dict or None."""
-    if not init_data or not BOT_TOKEN:
+    """Return authed user dict or None. Rejects are logged with the reason (never the payload)
+    so a live "no auth" report can be told apart: empty header (app opened as a link) vs a real
+    initData that fails the HMAC/expiry check (wrong token or clock)."""
+    if not BOT_TOKEN:
+        log.warning("auth reject: webapp has no BOT_TOKEN in its env — every write would 401")
+        return None
+    if not init_data:
+        log.warning("auth reject: empty X-Init-Data (app likely opened as a plain link, not web_app)")
         return None
     try:
         parsed = dict(urllib.parse.parse_qsl(init_data, keep_blank_values=True))
         hash_ = parsed.pop("hash", "")
+        if not hash_:
+            log.warning("auth reject: initData has no hash field")
+            return None
         auth_date = int(parsed.get("auth_date", "0"))
-        if time.time() - auth_date > INIT_DATA_MAX_AGE:
+        age = int(time.time() - auth_date)
+        if age > INIT_DATA_MAX_AGE:
+            log.warning("auth reject: initData expired (auth_date age=%ss > %ss)", age, INIT_DATA_MAX_AGE)
             return None
         data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
         secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
         calculated = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(calculated, hash_):
+            log.warning("auth reject: hash mismatch (BOT_TOKEN used by webapp != token that signed this app)")
             return None
         return json.loads(parsed.get("user", "{}"))
-    except Exception:
+    except Exception as e:
+        log.warning("auth reject: could not parse initData: %r", e)
         return None
 
 
