@@ -1,4 +1,4 @@
-"""Seed the DB and the channel with 10 fake Chișinău one-room listings.
+"""Seed the DB and the channel with the listings from listings.json.
 
 Reads listings.json from the same folder. Photos: looks for
 deploy/test_data/images/<name>.jpg - if a file is missing, generates a labelled
@@ -85,18 +85,19 @@ def _load_pool() -> list:
 
 async def _send_one(bot: Bot, admin_tg_id: int, db_user_id: int, item: dict,
                     idx: int, pool: list, cursor: int) -> tuple[int | None, int]:
-    """Upload this item's photos (taken from the shared pool by cursor),
-    create the listing and publish it. Returns (listing_id, new_cursor)."""
-    want = len(item.get("photos") or []) or 1
+    """Upload this item's OWN photos (by filename in images/, e.g. rNN.jpg), create the
+    listing and publish it. A photo file that is missing falls back to a labelled PIL
+    placeholder so the seed never fails. Returns (listing_id, cursor)."""
+    names = item.get("photos") or []
+    if not names:
+        names = [f"ph{idx}.jpg"]
     file_ids = []
-    for k in range(want):
-        if pool:
-            name = pool[cursor % len(pool)]
-            cursor += 1
-            with open(os.path.join(IMAGES_DIR, name), "rb") as f:
+    for k, name in enumerate(names):
+        path = os.path.join(IMAGES_DIR, name)
+        if os.path.isfile(path):
+            with open(path, "rb") as f:
                 blob = f.read()
         else:
-            name = item.get("photos", ["ph"])[k] if item.get("photos") else "ph"
             blob = _placeholder(f"{item['district']} \u00b7 {item['price']} \u20ac\n{name}", idx)
         msg = await bot.send_photo(admin_tg_id, BufferedInputFile(blob, filename=name))
         file_ids.append(msg.photo[-1].file_id)
@@ -141,7 +142,7 @@ async def main() -> None:
                 created.append(lid)
         except Exception as e:
             print(f"!! item '{item['slug']}' failed: {type(e).__name__}: {e}")
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(1.0)
     print(f"created {len(created)} listings: {created}")
     # record created ids so a re-run can clean exactly these up (self-cleaning seed)
     try:
