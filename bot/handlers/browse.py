@@ -5,6 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+import config
 import db
 import keyboards
 import render
@@ -40,9 +41,13 @@ def _plural(n: int) -> str:
 def _summary(data: dict) -> str:
     """One line of the active filters, so the panel is readable without decoding the chips."""
     bits = []
-    bits.append(DEAL_LABELS.get(data.get("deal")) if data.get("deal") else "аренда и продажа")
-    if data.get("rooms"):
-        bits.append(f"{data['rooms']}+ комн." if data["rooms"] >= 3 else f"{data['rooms']} комн.")
+    if config.FOCUS_DEAL:
+        bits.append(DEAL_LABELS.get(config.FOCUS_DEAL, config.FOCUS_DEAL).lower())
+    else:
+        bits.append(DEAL_LABELS.get(data.get("deal")) if data.get("deal") else "аренда и продажа")
+    r = int(config.FOCUS_ROOMS) if config.FOCUS_ROOMS else data.get("rooms")
+    if r:
+        bits.append(f"{r}+ комн." if r >= 3 else f"{r} комн.")
     if data.get("ptype"):
         bits.append(PTYPE_LABELS.get(data["ptype"], data["ptype"]).lower())
     if data.get("district"):
@@ -53,7 +58,14 @@ def _summary(data: dict) -> str:
 
 
 def _filters(data: dict) -> dict:
-    return {k: data.get(k) for k in FILTER_KEYS}
+    f = {k: data.get(k) for k in FILTER_KEYS}
+    # focus lock: the bot search is narrowed to the board's own situation no matter what the
+    # (possibly hidden) chips hold, so a sale / non-focus ad can never surface here.
+    if config.FOCUS_DEAL:
+        f["deal"] = config.FOCUS_DEAL
+    if config.FOCUS_ROOMS:
+        f["rooms"] = int(config.FOCUS_ROOMS)
+    return f
 
 
 def _any_filter(data: dict) -> bool:
@@ -86,30 +98,35 @@ async def _panel_msg(data: dict) -> tuple[str, InlineKeyboardMarkup]:
         f"Найдено: <b>{n}</b>"
     )
     rows = [
-        [
-            _chip("🏠 Аренда", data.get("deal") == "rent", "sf:deal:rent"),
-            _chip("💰 Продажа", data.get("deal") == "sale", "sf:deal:sale"),
-            _chip("👀 Всё", not data.get("deal"), "sf:deal:all"),
-        ],
-        [
-            _chip("🛏 Все", not data.get("rooms"), "sf:rooms:all"),
-            _chip("1", data.get("rooms") == 1, "sf:rooms:1"),
-            _chip("2", data.get("rooms") == 2, "sf:rooms:2"),
-            _chip("3+", data.get("rooms") == 3, "sf:rooms:3"),
-        ],
-        [
-            _chip("Квартира", data.get("ptype") == "apartment", "sf:ptype:apartment"),
-            _chip("Дом", data.get("ptype") == "house", "sf:ptype:house"),
-            _chip("Комната", data.get("ptype") == "room", "sf:ptype:room"),
-            _chip("Все типы", not data.get("ptype"), "sf:ptype:all"),
-        ],
         [InlineKeyboardButton(
             text=f"📍 Район: {data.get('district') or 'любой'}",
             callback_data="sf:pick:district")],
         [InlineKeyboardButton(text=price_line, callback_data="sf:pick:price")],
         [InlineKeyboardButton(text=f"🔍 Показать {n} {_plural(n)}", callback_data="sf:go")],
-        [InlineKeyboardButton(text="✖️ Сбросить фильтры", callback_data="sf:reset")],
     ]
+    # deal / rooms / type selectors only make sense on a full board; on a focused board the
+    # choice is already made, so we do not show chips whose taps cannot change the result.
+    if not config.FOCUS_DEAL:
+        rows.insert(0, [
+            _chip("🏠 Аренда", data.get("deal") == "rent", "sf:deal:rent"),
+            _chip("💰 Продажа", data.get("deal") == "sale", "sf:deal:sale"),
+            _chip("👀 Всё", not data.get("deal"), "sf:deal:all"),
+        ])
+    if not config.FOCUS_ROOMS:
+        rows.insert(1 if not config.FOCUS_DEAL else 0, [
+            _chip("🛏 Все", not data.get("rooms"), "sf:rooms:all"),
+            _chip("1", data.get("rooms") == 1, "sf:rooms:1"),
+            _chip("2", data.get("rooms") == 2, "sf:rooms:2"),
+            _chip("3+", data.get("rooms") == 3, "sf:rooms:3"),
+        ])
+    if not config.FOCUS_DEAL and not config.FOCUS_ROOMS:
+        rows.insert(2, [
+            _chip("Квартира", data.get("ptype") == "apartment", "sf:ptype:apartment"),
+            _chip("Дом", data.get("ptype") == "house", "sf:ptype:house"),
+            _chip("Комната", data.get("ptype") == "room", "sf:ptype:room"),
+            _chip("Все типы", not data.get("ptype"), "sf:ptype:all"),
+        ])
+    rows.append([InlineKeyboardButton(text="✖️ Сбросить фильтры", callback_data="sf:reset")])
     return text, InlineKeyboardMarkup(inline_keyboard=rows)
 
 

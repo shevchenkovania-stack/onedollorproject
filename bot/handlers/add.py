@@ -223,6 +223,12 @@ async def begin(message: Message, state: FSMContext) -> None:
     # cold-start vertical is apartments only: ptype is preset so the owner never picks a
     # type we still do not really take.
     await state.update_data(photos=[], ptype="apartment")
+    # focus lock: on a one-bedroom-rentals board the deal+rooms choice is already decided, so
+    # the owner starts straight on district + price instead of a step with nothing to pick.
+    if config.FOCUS_DEAL and config.FOCUS_ROOMS:
+        await state.update_data(deal=config.FOCUS_DEAL, rooms=int(config.FOCUS_ROOMS))
+        await _goto(message, state, "district_price")
+        return
     await _goto(message, state, "specs")
 
 
@@ -361,11 +367,14 @@ async def s_confirm_text(message: Message) -> None:
 async def s_confirm(cb: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     data = await state.get_data()
     user = await db.get_or_create_user(cb.from_user.id, cb.from_user.username, cb.from_user.first_name)
+    # focus lock: whatever ended up in the FSM, a focused board only ever stores its own deal/rooms.
+    deal = config.FOCUS_DEAL or data.get("deal")
+    rooms = int(config.FOCUS_ROOMS) if config.FOCUS_ROOMS else data.get("rooms")
     listing_id = await db.create_listing(
         user_id=user["id"],
-        deal=data.get("deal"),
+        deal=deal,
         ptype=data.get("ptype") or "apartment",
-        rooms=data.get("rooms"),
+        rooms=rooms,
         price=data.get("price"),
         currency="EUR",
         district=data.get("district"),

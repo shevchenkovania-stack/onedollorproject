@@ -14,15 +14,31 @@ SEARCH = "\U0001F50D Поиск"
 HELP = "\u2139\uFE0F Помощь"
 
 
+def add_label() -> str:
+    """The 'post a listing' button, worded for the board's focus. Generic when not focused."""
+    if config.FOCUS_DEAL == "rent" and config.FOCUS_ROOMS == "1":
+        return "\u2795 Сдам однушку"
+    if config.FOCUS_DEAL == "rent":
+        return "\u2795 Сдам жильё"
+    return ADD
+
+
+def board_label() -> str:
+    """Short name of the board for button copy, driven by the focus."""
+    if config.FOCUS_DEAL == "rent" and config.FOCUS_ROOMS == "1":
+        return "доску однушек"
+    return "доску"
+
+
 def main_menu() -> InlineKeyboardMarkup:
     kb = [
         [InlineKeyboardButton(text=SEARCH, callback_data="menu:search")],
-        [InlineKeyboardButton(text=ADD, callback_data="menu:add")],
+        [InlineKeyboardButton(text=add_label(), callback_data="menu:add")],
         [InlineKeyboardButton(text=MY, callback_data="menu:my")],
         [InlineKeyboardButton(text=HELP, callback_data="menu:help")],
     ]
     if config.WEBAPP_URL:
-        kb.insert(1, [InlineKeyboardButton(text="\U0001F4F1 Открыть доску", web_app=WebAppInfo(url=config.WEBAPP_URL))])
+        kb.insert(1, [InlineKeyboardButton(text=f"\U0001F4F1 Открыть {board_label()}", web_app=WebAppInfo(url=config.WEBAPP_URL))])
     if config.CHANNEL_URL:
         kb.append([InlineKeyboardButton(text="\U0001F4E3 Канал с объектами", url=config.CHANNEL_URL)])
     share = share_url()

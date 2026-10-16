@@ -20,10 +20,13 @@ log = logging.getLogger("chiriebot")
 async def set_commands(bot: Bot) -> None:
     # the descriptions are the bot's storefront: Telegram shows them in the menu and they are the
     # only copy a user reads before deciding to tap, so they name the action, not the router.
+    focused = config.FOCUS_DEAL == "rent" and config.FOCUS_ROOMS == "1"
     default = [
         BotCommand(command="start", description="Главное меню"),
-        BotCommand(command="search", description="Найти жильё в Кишинёве"),
-        BotCommand(command="add", description="Подать объявление бесплатно"),
+        BotCommand(command="search",
+                   description="Найти однушку в аренду" if focused else "Найти жильё в Кишинёве"),
+        BotCommand(command="add",
+                   description="Сдам однушку бесплатно" if focused else "Подать объявление бесплатно"),
         BotCommand(command="menu", description="Меню"),
     ]
     await bot.set_my_commands(default)
