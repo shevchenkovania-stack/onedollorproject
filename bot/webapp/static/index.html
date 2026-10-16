@@ -446,21 +446,26 @@ function toBot(startParam) {
 
 // ---------- native submit wizard (deal+rooms / district+price / contacts) ----------
 const SUB = { step: 1, deal: "rent", rooms: "1", district: "", price: "", currency: "EUR", description: "", phone: "" };
-function openSubmit() { subGoto(SUB.step || 1); showView("submit"); }
-window.onEnterSubmit = function () { subGoto(SUB.step || 1); };
+// SUB_START is the first real step. Normally 1 (Сделка + Комнат). applyFocus raises it to 2 when
+// BOTH deal and rooms are locked by the board focus - there is nothing left to choose on step 1, so
+// the wizard starts straight at "Район, цена" instead of showing an empty, jargon-named first step.
+let SUB_START = 1;
+function openSubmit() { subGoto(SUB.step && SUB.step >= SUB_START ? SUB.step : SUB_START); showView("submit"); }
+window.onEnterSubmit = function () { subGoto(SUB.step && SUB.step >= SUB_START ? SUB.step : SUB_START); };
 
 function selectChip(sel, attr, val) {
   document.querySelectorAll(sel + " .chip").forEach(c => c.classList.toggle("on", c.getAttribute(attr) === String(val)));
 }
 function subGoto(step) {
+  if (step < SUB_START) step = SUB_START;
   SUB.step = step;
   document.querySelectorAll("#subForm .fstep").forEach(el => el.style.display = (+el.dataset.step === step ? "" : "none"));
   document.querySelectorAll(".steps .stp").forEach(el => el.classList.toggle("on", +el.dataset.s <= step));
-  $("subBack").style.display = step > 1 ? "" : "none";
+  $("subBack").style.display = step > SUB_START ? "" : "none";
   $("subNext").textContent = step < 3 ? "Далее →" : "Отправить ✓";
   $("subErr").textContent = "";
 }
-function subBack() { if (SUB.step > 1) subGoto(SUB.step - 1); }
+function subBack() { if (SUB.step > SUB_START) subGoto(SUB.step - 1); }
 function subErr(msg) { $("subErr").textContent = msg; }
 
 async function subNext() {
@@ -511,7 +516,7 @@ function renderThumbs() {
 $("subPhotos").addEventListener("change", renderThumbs);
 
 function subReset() {
-  Object.assign(SUB, { step: 1, deal: "rent", rooms: "1", district: "", price: "", description: "", phone: "" });
+  Object.assign(SUB, { step: SUB_START, deal: "rent", rooms: "1", district: "", price: "", description: "", phone: "" });
   selectChip("#dealSel", "data-deal", "rent"); selectChip("#roomSel", "data-rooms", "1");
   $("subDistrict").value = ""; $("subPrice").value = ""; $("subDesc").value = ""; $("subPhone").value = "";
   $("subPhotos").value = ""; $("subThumbs").innerHTML = "";
@@ -672,15 +677,27 @@ function applyFocus() {
   // submit: no deal/room choice to make - it is fixed. hide the selectors and their labels.
   if (FOCUS_DEAL) { SUB.deal = FOCUS_DEAL; _hideWithLabel($("dealSel")); }
   if (FOCUS_ROOMS) { SUB.rooms = FOCUS_ROOMS; _hideWithLabel($("roomSel")); }
+  // When BOTH the deal and the room count are locked by the board, step 1 has no decision left -
+  // so it is not a step at all. Drop it: the wizard opens straight on "Район, цена" (now step 1)
+  // and "Контакты" (now step 2). This is what removes the confusing, content-less first screen.
+  const fullLock = FOCUS_DEAL && FOCUS_ROOMS;
   const s1 = document.querySelector('#subForm .fstep[data-step="1"]');
-  if (s1 && !$("focusNote")) {
+  if (fullLock) {
+    SUB_START = 2;
+    SUB.step = 2;
+    if (s1) s1.style.display = "none";
+    const chip1 = document.querySelector('.steps .stp[data-s="1"]'); if (chip1) chip1.style.display = "none";
+    const chip2 = document.querySelector('.steps .stp[data-s="2"]'); if (chip2) chip2.textContent = "1 · Район, цена";
+    const chip3 = document.querySelector('.steps .stp[data-s="3"]'); if (chip3) chip3.textContent = "2 · Контакты";
+  } else if (s1 && !$("focusNote")) {
+    // only ONE of deal/rooms is locked, so step 1 still asks for the other - keep it, but say plainly
+    // what it is instead of the jargon word "формат".
     const note = document.createElement("div");
     note.id = "focusNote"; note.className = "flabel";
     note.style.cssText = "color:var(--hint);font-weight:500;line-height:1.5";
     const what = (FOCUS_ROOMS === "1" ? "однушку" : "квартиру")
       + (FOCUS_DEAL === "rent" ? " в аренду" : FOCUS_DEAL === "sale" ? " в продажу" : "");
-    note.textContent = "Ты размещаешь " + what + " в Кишинёве · от хозяина · без агентов. "
-      + "Это уже выбрано — жми «Далее» и укажи район и цену.";
+    note.textContent = "Ты размещаешь " + what + " в Кишинёве · от хозяина · без агентов.";
     s1.prepend(note);
   }
   // reposition the copy: from "board" to a calm, single-purpose promise.
@@ -693,7 +710,7 @@ function applyFocus() {
     + (FOCUS_DEAL === "rent" ? " в аренду" : "") + " в Кишинёве · от проверенных хозяев · без комиссии"
     + "<br><span onclick=\"openSubmit()\" style=\"text-decoration:underline;cursor:pointer\">➕ Разместить своё бесплатно →</span>";
   const stp1 = document.querySelector('.steps .stp[data-s="1"]');
-  if (stp1) stp1.textContent = "1 · " + (FOCUS_ROOMS === "1" ? "Однушка" : "Квартира")
+  if (stp1 && !fullLock) stp1.textContent = "1 · " + (FOCUS_ROOMS === "1" ? "Однушка" : "Квартира")
     + (FOCUS_DEAL === "rent" ? " · аренда" : FOCUS_DEAL === "sale" ? " · продажа" : "");
   document.title = "Găsește Casa · " + (FOCUS_ROOMS === "1" ? "Однушки" : "Жильё")
     + (FOCUS_DEAL === "rent" ? " в аренду" : "") + " в Кишинёве · без агентов";
