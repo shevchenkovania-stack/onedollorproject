@@ -451,7 +451,13 @@ const SUB = { step: 1, deal: "rent", rooms: "1", district: "", price: "", curren
 // the wizard starts straight at "Район, цена" instead of showing an empty, jargon-named first step.
 let SUB_START = 1;
 function openSubmit() { subGoto(SUB.step && SUB.step >= SUB_START ? SUB.step : SUB_START); showView("submit"); }
-window.onEnterSubmit = function () { subGoto(SUB.step && SUB.step >= SUB_START ? SUB.step : SUB_START); };
+window.onEnterSubmit = function () {
+  subGoto(SUB.step && SUB.step >= SUB_START ? SUB.step : SUB_START);
+  // No initData means the app was opened as a plain link, not through the bot's Mini App button.
+  // Telegram only signs a person in for a web_app launch, so a submit would die on 401 with no
+  // visible cause (the owner read that as "the button doesn't press"). Say it up front instead.
+  if (!MY_ID) $("subErr").textContent = "Открой через кнопку бота (@gaseste_casa_bot → «🏠 Искать квартиры»), иначе отправка недоступна.";
+};
 
 function selectChip(sel, attr, val) {
   document.querySelectorAll(sel + " .chip").forEach(c => c.classList.toggle("on", c.getAttribute(attr) === String(val)));
@@ -482,7 +488,8 @@ async function subNext() {
 }
 
 async function subSend() {
-  const btn = $("subNext"); btn.disabled = true; subErr("");
+  const btn = $("subNext"); const wasLabel = btn.textContent;
+  btn.disabled = true; btn.textContent = "Отправка…"; subErr("");
   const files = [...($("subPhotos").files || [])].slice(0, 10);
   try {
     const r = await api("/api/listing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
@@ -499,8 +506,15 @@ async function subSend() {
     notice("Отправлено на модерацию ✅ Появится в поиске после проверки.");
     subReset(); showView("my");   // the pending card now shows under «Мои»
   } catch (e) {
-    subErr(e && e.message === "401" ? "Открой приложение через Telegram, чтобы подавать" : "Не удалось отправить. Попробуй ещё раз.");
-  } finally { btn.disabled = false; }
+    // A 401 means no signed initData (opened as a link, not through the bot button). A quiet red
+    // line at the page bottom reads as "nothing happens", so pop an alert that states the fix.
+    if (e && e.message === "401") {
+      notice("Открой Găsește Casa через бота: @gaseste_casa_bot → кнопка «🏠 Искать квартиры». Только так Telegram даёт авторизацию для отправки.");
+      subErr("Нет авторизации Telegram. Нажми «🏠 Искать квартиры» в меню бота и повтори.");
+    } else {
+      subErr("Не удалось отправить. Попробуй ещё раз.");
+    }
+  } finally { btn.disabled = false; btn.textContent = wasLabel; }
 }
 
 function pickPhotos() { $("subPhotos").click(); }
