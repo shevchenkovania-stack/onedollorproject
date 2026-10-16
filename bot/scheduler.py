@@ -86,8 +86,10 @@ async def notify_search_subscribers(bot: Bot, listing) -> int:
                f"{deal}{rooms} \u00b7 \U0001F4CD {dist}\n"
                f"\U0001F4B8 {price} {cur}")
         if config.WEBAPP_URL:
+            # web_app (not plain url): only a Mini App launch carries Telegram's initData,
+            # so the viewer can open the card AND, if they're the owner, submit without a 401.
             btn = {"text": "\U0001F441 \u041e\u0442\u043a\u0440\u044b\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435",
-                   "url": config.WEBAPP_URL.rstrip("/") + f"/#listing={lid}"}
+                   "web_app": {"url": config.WEBAPP_URL.rstrip("/") + f"/#listing={lid}"}}
         else:
             btn = {"text": "\U0001F441 \u041e\u0442\u043a\u0440\u044b\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435",
                    "callback_data": f"view:{lid}"}

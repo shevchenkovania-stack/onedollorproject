@@ -2,7 +2,7 @@
 import os
 
 from aiogram import Bot
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, WebAppInfo
 
 import config
 import db
@@ -45,9 +45,13 @@ def contact_kb(row, owner) -> InlineKeyboardMarkup | None:
     # viber / facebook / site. same builder as the DM card, one source of truth
     without_tg = {k: v for k, v in contacts.items() if k != "telegram"}
     rows.extend(keyboards.contact_buttons(without_tg))
-    browse_url = config.WEBAPP_URL or config.CHANNEL_URL
-    if browse_url:
-        rows.append([InlineKeyboardButton(text="\U0001F50D Смотреть все объекты", url=browse_url)])
+    if config.WEBAPP_URL:
+        # Mini App launch (web_app) so the tap carries initData; a plain url would open the
+        # in-app browser signed out and the owner's "Разместить" would 401.
+        rows.append([InlineKeyboardButton(text="\U0001F50D Смотреть все объекты",
+                                         web_app=WebAppInfo(url=config.WEBAPP_URL))])
+    elif config.CHANNEL_URL:
+        rows.append([InlineKeyboardButton(text="\U0001F50D Смотреть все объекты", url=config.CHANNEL_URL)])
     # every channel post is a shareable advert: forwarding brings new viewers AND new owners
     share = keyboards.share_url(row["id"])
     if share:
