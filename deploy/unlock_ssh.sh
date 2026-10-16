@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Stop fail2ban from banning the OWNER so deploys/verifications can run freely.
+#
+#   scp deploy/unlock_ssh.sh root@<IP>:/tmp/
+#   ssh root@<IP> "sed -i 's/\r$//' /tmp/unlock_ssh.sh && bash /tmp/unlock_ssh.sh"
+#
+# Why: fail2ban counts "connections to port 22", it does not know a legit deploy burst
+# is the owner. A normal interactive session opens many SCP/SSH connections in under a
+# minute and trips the old maxretry=5 rule. This script (a) puts your current address in
+# the permanent whitelist and (b) loosens the trigger so bursts are fine while real brute
+# force is still caught. It only rewrites the fail2ban drop-in and restarts fail2ban - it
+# NEVER reloads/restarts sshd, so this live session is not dropped. Idempotent: re-running
+# changes nothing and keeps previously whitelisted addresses.
+set -e
+
+# The address fail2ban would see for THIS connection. When run over ssh, SSH_CLIENT is set
+# by sshd to "client-ip client-port server-ip". If run some other way it is empty.
+ME=$(echo "${SSH_CLIENT:-}" | awk '{print $1}')
+echo "=== your admin IP (from this session): ${ME:-UNKNOWN} ==="
+if [ -z "$ME" ]; then
+  echo "not running over ssh - cannot detect your IP. Run this through ssh."
+  exit 1
+fi
+
+FILE=/etc/fail2ban/jail.d/imobiliare.conf
+
+# Preserve any addresses we whitelisted before, so a changing IP history stays allowed.
+PREV_IGNORE=$(awk -F= '/^ignoreip/{print $2}' "$FILE" 2>/dev/null | tr -s ' ')
+echo "=== previously whitelisted: ${PREV_IGNORE:-none} ==="
+
+cat > "$FILE" <<EOF
+# managed by deploy/unlock_ssh.sh - owner whitelist + deploy-friendly limits
+[sshd]
+enabled  = true
+port     = 22
+backend  = systemd
+# interactive deploys open many ssh/scp connections fast; only stop real brute force
+maxretry = 30
+findtime = 10m
+bantime  = 30m
+# never ban localhost or any address the owners have connected from
+ignoreip = 127.0.0.1/8 ::1 ${PREV_IGNORE} ${ME}
+EOF
+
+systemctl restart fail2ban
+sleep 2
+
+# Lift any ban currently sitting on us so this session's follow-up works right away.
+if fail2ban-client status sshd 2>/dev/null | grep -qw "$ME"; then
+  fail2ban-client set sshd unbanip "$ME" >/dev/null && echo "=== unbanned $ME ==="
+else
+  echo "=== no active ban on $ME ==="
+fi
+
+echo "=== fail2ban: $(systemctl is-active fail2ban) ==="
+fail2ban-client status sshd
+echo "OK: your IP is whitelisted and the trigger is loosened - work freely."
