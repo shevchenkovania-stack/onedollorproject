@@ -26,3 +26,5 @@ photos/
 
 # local assets (screens export, etc.) - not source
 *.zip
+# per-deploy build artifact (tarball of bot/ files uploaded to /tmp)
+*.tgz

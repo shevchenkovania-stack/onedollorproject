@@ -78,6 +78,16 @@ def photo_urls(listing_id: int, count: int) -> list[str]:
     return out
 
 
+def _ts_active(row, col: str) -> bool:
+    """True when a *_until timestamp column is set and in the future. Tolerates a row that
+    predates the column (a fresh test fixture or a webapp that started before the migration)."""
+    try:
+        v = row[col]
+    except (IndexError, KeyError):
+        return False
+    return bool(v and v > time.strftime("%Y-%m-%d %H:%M:%S"))
+
+
 def row_to_item(row, with_detail: bool = False) -> dict:
     item = {
         "id": row["id"],
@@ -94,6 +104,7 @@ def row_to_item(row, with_detail: bool = False) -> dict:
         "floors": row["floors"],
         "views": row["views"],
         "boosted": bool(row["boosted_until"] and row["boosted_until"] > time.strftime("%Y-%m-%d %H:%M:%S")),
+        "featured": _ts_active(row, "featured_until"),
         "photos": photo_urls(row["id"], len(json.loads(row["photos"] or "[]"))),
     }
     if with_detail:
@@ -150,8 +161,9 @@ async def api_listings(request: web.Request) -> web.Response:
         args += [like, like]
     page = max(int(q.get("page", "1")), 1)
     per = 20
-    # boosted ads always lead; the tie-break is the sort the user picked (new / cheaper / dearer)
-    top = "(boosted_until IS NOT NULL AND boosted_until > datetime('now')) DESC"
+    # highlighted ("Срочно") ads lead, then boosted, then the sort the user picked (new / cheap / dear)
+    top = ("(featured_until IS NOT NULL AND featured_until > datetime('now')) DESC, "
+           "(boosted_until IS NOT NULL AND boosted_until > datetime('now')) DESC")
     sort = q.get("sort")
     if sort == "cheap":
         tail = "price ASC"
@@ -234,6 +246,7 @@ def _my_item(row) -> dict:
         "expires_at": row["expires_at"],
         "views": row["views"],
         "boosted": bool(row["boosted_until"] and row["boosted_until"] > time.strftime("%Y-%m-%d %H:%M:%S")),
+        "featured": _ts_active(row, "featured_until"),
         "photos": photo_urls(row["id"], n_photos),
     }
 
@@ -280,25 +293,46 @@ async def api_listing_action(request: web.Request) -> web.Response:
         return web.json_response({"error": "not_found"}, status=404)
     if str(row["tg_id"]) != str(viewer["id"]):
         return web.json_response({"error": "not_owner"}, status=403)
+    charged = False
     if action == "extend":
+        # paid board keeps an ad live for LISTING_WEEK_DAYS at PRICE_LISTING_MDL, drawn from the
+        # wallet (a spend is an event, not a payments row - the leu were booked on top-up). With
+        # PAID_ENABLED=0 this is the same free one-tap it always was.
+        days, event = config.LISTING_DAYS, "listing_extended"
+        if config.PAID_ENABLED:
+            cur = await conn.execute("SELECT balance_mdl FROM users WHERE id = ?", (row["user_id"],))
+            urow = await cur.fetchone()
+            bal = int((urow["balance_mdl"] if urow else 0) or 0)
+            if bal < config.PRICE_LISTING_MDL:
+                return web.json_response({"error": "insufficient_balance",
+                                          "need": config.PRICE_LISTING_MDL, "balance": bal}, status=402)
+            cur = await conn.execute(
+                "UPDATE users SET balance_mdl = balance_mdl - ? WHERE id = ? AND balance_mdl >= ?",
+                (config.PRICE_LISTING_MDL, row["user_id"], config.PRICE_LISTING_MDL))
+            if cur.rowcount == 0:
+                await conn.rollback()
+                return web.json_response({"error": "insufficient_balance",
+                                          "need": config.PRICE_LISTING_MDL, "balance": 0}, status=402)
+            days, event, charged = config.LISTING_WEEK_DAYS, "renewal_paid", True
         await conn.execute(
             "UPDATE listings SET status = 'active', expires_at = datetime('now', ?), "
             "updated_at = datetime('now') WHERE id = ?",
-            (f"+{config.LISTING_DAYS} days", listing_id))
+            (f"+{days} days", listing_id))
     else:
+        event = f"listing_{action}"
         await conn.execute(
             "UPDATE listings SET status = 'archived', updated_at = datetime('now') WHERE id = ?",
             (listing_id,))
     await conn.execute(
         "INSERT INTO events (name, user_id, listing_id) VALUES (?, ?, ?)",
-        (f"listing_{action}", row["user_id"], listing_id))
+        (event, row["user_id"], listing_id))
     await conn.commit()
     cur = await conn.execute("SELECT status, expires_at FROM listings WHERE id = ?", (listing_id,))
     new = await cur.fetchone()
     return web.json_response({
         "ok": True, "id": listing_id, "status": new["status"],
         "status_label": STATUS_LABELS.get(new["status"], new["status"]),
-        "expires_at": new["expires_at"],
+        "expires_at": new["expires_at"], "charged": charged,
     })
 
 
@@ -549,6 +583,15 @@ async def api_create_search_alert(request: web.Request) -> web.Response:
     if not urow:
         return web.json_response({"error": "no_user"}, status=400)
     uid = urow["id"]
+    # Cold-start alert hook: a first-time watcher gets a free subscription window, so the value of
+    # alerts lands before any money is asked. Fires only when they have NEVER subscribed
+    # (alerts_until IS NULL) - an expired trial or lapsed paid plan is not re-baited for free.
+    if config.PAID_ENABLED:
+        await conn.execute(
+            "UPDATE users SET alerts_until = datetime('now', ?) "
+            "WHERE id = ? AND alerts_until IS NULL",
+            (f"+{config.ALERTS_MONTH_DAYS} days", uid))
+        await conn.commit()
     # one alert per identical filter set -> re-arm instead of piling up duplicates
     cur = await conn.execute(
         "SELECT id FROM search_alerts WHERE user_id = ? AND ifnull(deal,'') = ifnull(?, '') "

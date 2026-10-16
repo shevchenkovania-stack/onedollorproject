@@ -41,9 +41,10 @@ scp -o BatchMode=yes $Local ($target + ":" + $RemoteDir + "/" + $name) 2>&1 | Ou
 # (otherwise every remote warning renders as a red NativeCommandError block on top of the real output).
 # The merge must wrap the WHOLE command list in { ...; } 2>&1 - a trailing 2>&1 would only apply to
 # the last command and the earlier stderr would still come back as error records.
-# Image files are binary: sed 's/\r$//' would silently corrupt them, so only text gets the CRLF strip.
+# Image files and archives are binary: sed 's/\r$//' would silently corrupt them, so only text gets the
+# CRLF strip. (A .tgz/.gz with a 0x0D byte in its deflate stream would otherwise arrive undecodable.)
 $ext = [IO.Path]::GetExtension($name).ToLower()
-if ($ext -eq ".png" -or $ext -eq ".jpg" -or $ext -eq ".jpeg") {
+if ($ext -eq ".png" -or $ext -eq ".jpg" -or $ext -eq ".jpeg" -or $ext -eq ".tgz" -or $ext -eq ".gz" -or $name.ToLower().EndsWith(".tar.gz")) {
     $cmd = "{ " + $RemoteCmd + "; } 2>&1"
 } else {
     $cmd = "{ sed -i 's/\r$//' " + $RemoteDir + "/" + $name + "; " + $RemoteCmd + "; } 2>&1"

@@ -115,6 +115,18 @@ CREATE TABLE IF NOT EXISTS search_alerts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_alerts_user ON search_alerts(user_id);
+
+-- Balance top-up inbox: the buyer reports an MIA/card transfer for a lump sum, an admin (or the
+-- card webhook) ticks it, and only then does the money land in users.balance_mdl. Kept separate
+-- from `boosts` because a top-up has no listing behind it. Idempotent by the status transition.
+CREATE TABLE IF NOT EXISTS topups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    tg_id INTEGER NOT NULL,
+    amount_mdl INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT DEFAULT (datetime('now'))
+);
 """
 
 
@@ -138,8 +150,17 @@ async def _migrate() -> None:
     if "boost_credits" not in cols:
         # free top-raises granted to the first listing publishers (founders gift)
         await _conn.execute("ALTER TABLE users ADD COLUMN boost_credits INTEGER NOT NULL DEFAULT 0")
+    if "balance_mdl" not in cols:
+        # the small MDL wallet every paid service draws from (see config PAID_ENABLED)
+        await _conn.execute("ALTER TABLE users ADD COLUMN balance_mdl INTEGER NOT NULL DEFAULT 0")
+    if "alerts_until" not in cols:
+        # a saved-search subscription is paid: alerts push only while now < alerts_until
+        await _conn.execute("ALTER TABLE users ADD COLUMN alerts_until TEXT")
     cur = await _conn.execute("PRAGMA table_info(listings)")
     cols = {r["name"] for r in await cur.fetchall()}
+    if "featured_until" not in cols:
+        # the paid "Срочно" badge: a highlighted ad leads the board with a fire label
+        await _conn.execute("ALTER TABLE listings ADD COLUMN featured_until TEXT")
     if "nudged_at" not in cols:
         await _conn.execute("ALTER TABLE listings ADD COLUMN nudged_at TEXT")
     if "contacts" not in cols:
@@ -188,6 +209,14 @@ async def ensure_schema(conn: aiosqlite.Connection) -> None:
         await conn.execute("ALTER TABLE listings ADD COLUMN contacts TEXT DEFAULT NULL")
     if "expires_at" not in cols:
         await conn.execute("ALTER TABLE listings ADD COLUMN expires_at TEXT")
+    if "featured_until" not in cols:
+        await conn.execute("ALTER TABLE listings ADD COLUMN featured_until TEXT")
+    cur = await conn.execute("PRAGMA table_info(users)")
+    ucols = {r["name"] for r in await cur.fetchall()}
+    if "balance_mdl" not in ucols:
+        await conn.execute("ALTER TABLE users ADD COLUMN balance_mdl INTEGER NOT NULL DEFAULT 0")
+    if "alerts_until" not in ucols:
+        await conn.execute("ALTER TABLE users ADD COLUMN alerts_until TEXT")
     await conn.commit()
 
 
@@ -246,6 +275,132 @@ async def get_user_by_tg_id(tg_id: int) -> aiosqlite.Row | None:
     """Lookup without touching username/first_name (get_or_create_user would overwrite them)."""
     cur = await _db().execute("SELECT * FROM users WHERE tg_id = ?", (tg_id,))
     return await cur.fetchone()
+
+
+# --- wallet: one small MDL balance every paid service draws from -------------
+
+async def get_balance(user_id: int) -> int:
+    cur = await _db().execute("SELECT balance_mdl FROM users WHERE id = ?", (user_id,))
+    row = await cur.fetchone()
+    return int(row["balance_mdl"]) if row else 0
+
+
+async def add_balance(user_id: int, mdl: int) -> None:
+    db = _db()
+    await db.execute("UPDATE users SET balance_mdl = balance_mdl + ? WHERE id = ?", (int(mdl), user_id))
+    await db.commit()
+
+
+async def spend_balance(user_id: int, mdl: int) -> bool:
+    """Atomically move money out of the wallet. The WHERE guard means a double-tap or a
+    concurrent spend can never take the same leu twice or drive the balance negative."""
+    db = _db()
+    cur = await db.execute(
+        "UPDATE users SET balance_mdl = balance_mdl - ? WHERE id = ? AND balance_mdl >= ?",
+        (int(mdl), user_id, int(mdl)))
+    await db.commit()
+    return cur.rowcount > 0
+
+
+async def has_published_listing(user_id: int) -> bool:
+    """True once an owner has had ANY ad go live (active or since archived): the cold-start free
+    hook applies only to a first-time publisher, so we must not hand it out again."""
+    cur = await _db().execute(
+        "SELECT 1 FROM listings WHERE user_id = ? AND status IN ('active','archived') LIMIT 1",
+        (user_id,))
+    return await cur.fetchone() is not None
+
+
+# --- top-ups: a lump-sum report an admin (or the card webhook) credits --------
+
+async def create_topup(user_id: int, tg_id: int, amount_mdl: int) -> int:
+    db = _db()
+    cur = await db.execute(
+        "INSERT INTO topups (user_id, tg_id, amount_mdl) VALUES (?, ?, ?)",
+        (user_id, tg_id, int(amount_mdl)))
+    await db.commit()
+    return cur.lastrowid
+
+
+async def get_topup(topup_id: int) -> aiosqlite.Row | None:
+    cur = await _db().execute("SELECT * FROM topups WHERE id = ?", (topup_id,))
+    return await cur.fetchone()
+
+
+async def credit_topup(topup_id: int) -> aiosqlite.Row | None:
+    """Move one pending top-up into the wallet. Returns the row the first time, None on a repeat,
+    so a double admin tick can never mint money twice."""
+    db = _db()
+    cur = await db.execute("SELECT * FROM topups WHERE id = ? AND status = 'pending'", (topup_id,))
+    row = await cur.fetchone()
+    if not row:
+        return None
+    cur = await db.execute("UPDATE topups SET status = 'paid' WHERE id = ? AND status = 'pending'", (topup_id,))
+    if cur.rowcount == 0:
+        await db.commit()
+        return None
+    await db.execute("UPDATE users SET balance_mdl = balance_mdl + ? WHERE id = ?",
+                     (row["amount_mdl"], row["user_id"]))
+    await db.commit()
+    return row
+
+
+async def reject_topup(topup_id: int) -> bool:
+    db = _db()
+    cur = await db.execute("UPDATE topups SET status = 'rejected' WHERE id = ? AND status = 'pending'", (topup_id,))
+    await db.commit()
+    return cur.rowcount > 0
+
+
+async def pending_topups(limit: int = 20):
+    cur = await _db().execute(
+        "SELECT t.*, u.username FROM topups t JOIN users u ON u.id = t.user_id "
+        "WHERE t.status = 'pending' ORDER BY t.id LIMIT ?", (limit,))
+    return await cur.fetchall()
+
+
+async def feature_listing(listing_id: int, days: int) -> None:
+    """Turn on the paid "Срочно" badge for `days`: a highlighted ad leads the board (see search
+    ORDER BY) and carries a fire label on the card."""
+    db = _db()
+    await db.execute(
+        "UPDATE listings SET featured_until = datetime('now', ?), updated_at = datetime('now') WHERE id = ?",
+        (f"+{int(days)} days", listing_id))
+    await db.commit()
+
+
+async def subscribe_alerts(user_id: int, days: int) -> None:
+    """Extend the saved-search subscription: alerts only push while now < alerts_until."""
+    db = _db()
+    await db.execute(
+        "UPDATE users SET alerts_until = datetime("
+        "CASE WHEN alerts_until IS NULL OR alerts_until <= datetime('now') THEN datetime('now') "
+        "ELSE alerts_until END, ?) WHERE id = ?",
+        (f"+{int(days)} days", user_id))
+    await db.commit()
+
+
+async def is_alerts_subscribed(user_id: int) -> bool:
+    """True while the paid saved-search subscription is live. Callers gate on config.PAID_ENABLED:
+    a free board pushes every alert, a paid one only to subscribers. Checked in SQL so the clock
+    stays the DB's UTC, same as every other *_until comparison."""
+    cur = await _db().execute(
+        "SELECT 1 FROM users WHERE id = ? AND alerts_until IS NOT NULL "
+        "AND alerts_until > datetime('now')", (user_id,))
+    return await cur.fetchone() is not None
+
+
+async def grant_alerts_trial(user_id: int, days: int) -> bool:
+    """Cold-start hook for alerts: a first-time watcher gets a free window. Only fires when the
+    user has NEVER been subscribed (alerts_until IS NULL), so an expired trial or a lapsed paid
+    subscription is not re-baited for free. Returns True if the trial was just granted."""
+    db = _db()
+    cur = await db.execute(
+        "UPDATE users SET alerts_until = datetime('now', ?) "
+        "WHERE id = ? AND alerts_until IS NULL",
+        (f"+{int(days)} days", user_id))
+    await db.commit()
+    return cur.rowcount > 0
 
 
 async def create_listing(**kw: Any) -> int:
@@ -415,7 +570,9 @@ async def search_listings(
     if price_max:
         q += " AND price <= ?"
         args.append(price_max)
-    q += " ORDER BY (boosted_until IS NOT NULL AND boosted_until > datetime('now')) DESC, created_at DESC LIMIT ? OFFSET ?"
+    q += (" ORDER BY (featured_until IS NOT NULL AND featured_until > datetime('now')) DESC, "
+          "(boosted_until IS NOT NULL AND boosted_until > datetime('now')) DESC, "
+          "created_at DESC LIMIT ? OFFSET ?")
     args.extend([limit, offset])
     cur = await _db().execute(q, args)
     return await cur.fetchall()

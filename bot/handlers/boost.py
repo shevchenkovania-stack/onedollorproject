@@ -99,6 +99,40 @@ async def boost_offer(cb: CallbackQuery) -> None:
     await offer_flow(cb.message, cb.from_user, listing_id)
 
 
+@router.callback_query(F.data.startswith("boostwallet:"))
+async def boost_from_wallet(cb: CallbackQuery) -> None:
+    """Instant Boost drawn from the wallet: the leu are already in, so the top spot lights up on
+    the tap - no transfer to send, no admin to wait for. A wallet spend is an EVENT, never a
+    payments row; the money was booked as revenue when it entered the wallet."""
+    if not config.PAID_ENABLED:
+        await cb.answer("Кошелёк отключён на бесплатной доске.", show_alert=True)
+        return
+    listing_id = int(cb.data.split(":", 1)[1])
+    row = await db.get_listing(listing_id)
+    await cb.answer()
+    if not row:
+        await cb.message.answer("Объявление не найдено.")
+        return
+    user = await db.get_or_create_user(cb.from_user.id, cb.from_user.username, cb.from_user.first_name)
+    if row["user_id"] != user["id"]:
+        await cb.message.answer("Поднять можно только своё объявление.")
+        return
+    price = config.BOOST_MDL
+    if not await db.spend_balance(user["id"], price):
+        bal = await db.get_balance(user["id"])
+        await cb.message.answer(
+            f"\u26A1 Boost стоит <b>{price}</b> леев, на балансе <b>{bal}</b>.\nПополни кошелёк 👇",
+            parse_mode="HTML", reply_markup=keyboards.wallet_menu_kb(user["id"]))
+        return
+    await db.boost_listing(listing_id, config.BOOST_DAYS)
+    await db.log_boost(listing_id, user["id"], price, config.BOOST_DAYS, status="wallet")
+    await db.log_event("boost_wallet_paid", user_id=user["id"], listing_id=listing_id, meta=str(price))
+    await cb.message.answer(
+        f"\U0001F680 Объявление <b>#{listing_id}</b> поднято в топ на "
+        f"<b>{config.BOOST_DAYS} дней</b> (списано <b>{price}</b> леев с баланса).",
+        parse_mode="HTML", reply_markup=keyboards.main_menu())
+
+
 @router.callback_query(F.data.startswith("boostpay:"))
 async def boost_pay(cb: CallbackQuery, bot: Bot) -> None:
     listing_id = int(cb.data.split(":", 1)[1])

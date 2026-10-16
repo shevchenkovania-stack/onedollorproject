@@ -60,6 +60,7 @@ select, input[type=number], input[type=tel], input[type=text] { flex: 1; min-wid
 .badges { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; }
 .badge { font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 8px; background: rgba(20, 28, 36, .62); color: #fff; backdrop-filter: blur(4px); }
 .badge.boost { background: linear-gradient(135deg, #f7b733, #f5820b); color: #3a2600; }
+.badge.fire { background: linear-gradient(135deg, #ff512f, #dd2476); color: #fff; }
 .pcount { position: absolute; bottom: 78px; right: 10px; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 8px; background: rgba(20, 28, 36, .62); color: #fff; backdrop-filter: blur(4px); }
 .fav { position: absolute; top: 8px; right: 8px; width: 34px; height: 34px; border-radius: 50%; border: none; background: rgba(255, 255, 255, .82); color: #b0413e; font-size: 17px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--shadow); }
 .fav.on { background: #fff; color: #e0245e; }
@@ -315,7 +316,7 @@ function toggleFavOnly() {
 
 function cardHtml(it) {
   const img = it.photos.length ? `<img src="${it.photos[0]}" loading="lazy">` : `<div class="noimg">🏠</div>`;
-  const badges = `<div class="badges">${it.boosted?'<span class="badge boost">🚀 Boost</span>':''}<span class="badge">${esc(it.deal_label)}</span></div>`;
+  const badges = `<div class="badges">${it.featured?'<span class="badge fire">🔥 Срочно</span>':''}${it.boosted?'<span class="badge boost">🚀 Boost</span>':''}<span class="badge">${esc(it.deal_label)}</span></div>`;
   const pc = it.photos.length > 1 ? `<span class="pcount">📷 ${it.photos.length}</span>` : "";
   const facts = [it.rooms?it.rooms+"к":"", it.area?it.area+" м²":"", it.floor?it.floor+(it.floors?"/"+it.floors:"")+" эт":""].filter(Boolean).join(" · ");
   const fav = `<button class="fav ${isFav(it.id)?'on':''}" data-fav="${it.id}" onclick="toggleFav(${it.id}, event)">${isFav(it.id)?'♥':'♡'}</button>`;
@@ -609,7 +610,7 @@ async function openDetail(id) {
     `<div class="fact"><b>${it.views}</b>просмотров</div>`,
   ].join("");
   $("sheetBody").innerHTML = `${gal}<div class="detail">
-    <h2>${it.price} <small>${esc(it.currency)}${it.deal==="rent"?"/мес":""}</small> ${it.boosted?'<span class="badge boost" style="position:static">🚀 Boost</span>':''}</h2>
+    <h2>${it.price} <small>${esc(it.currency)}${it.deal==="rent"?"/мес":""}</small> ${it.featured?'<span class="badge fire" style="position:static">🔥 Срочно</span>':''}${it.boosted?'<span class="badge boost" style="position:static">🚀 Boost</span>':''}</h2>
     <div class="sub">📍 ${esc(it.district)}</div>
     <div class="facts">${facts}</div>
     ${it.description?`<div class="desc">${esc(it.description)}</div>`:""}

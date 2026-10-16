@@ -76,11 +76,32 @@ async def extend(cb: CallbackQuery) -> None:
     await cb.answer()
     if not row:
         return
-    await db.extend_listing(listing_id, config.LISTING_DAYS)
-    await db.log_event("listing_extended", user_id=row["user_id"], listing_id=listing_id)
+    # Free board: extend is a free one-tap (unchanged). Paid board: keeping an ad live costs
+    # PRICE_LISTING_MDL per LISTING_WEEK_DAYS, drawn from the wallet. A spend is an EVENT, never a
+    # payments row - the leu were already booked as revenue when the wallet was topped up.
+    if not config.PAID_ENABLED:
+        await db.extend_listing(listing_id, config.LISTING_DAYS)
+        await db.log_event("listing_extended", user_id=row["user_id"], listing_id=listing_id)
+        await cb.message.answer(
+            f"\U0001F501 Объявление <b>#{listing_id}</b> снова активно ещё на "
+            f"<b>{config.LISTING_DAYS} дней</b>.",
+            parse_mode="HTML", reply_markup=keyboards.main_menu(),
+        )
+        return
+    user = await db.get_or_create_user(cb.from_user.id, cb.from_user.username, cb.from_user.first_name)
+    price = config.PRICE_LISTING_MDL
+    if not await db.spend_balance(user["id"], price):
+        bal = await db.get_balance(user["id"])
+        await cb.message.answer(
+            f"\U0001F501 Продление стоит <b>{price}</b> лей за <b>{config.LISTING_WEEK_DAYS} дней</b>. "
+            f"На балансе <b>{bal}</b> леев.\nПополни кошелёк 👇",
+            parse_mode="HTML", reply_markup=keyboards.wallet_menu_kb(user["id"]))
+        return
+    await db.extend_listing(listing_id, config.LISTING_WEEK_DAYS)
+    await db.log_event("renewal_paid", user_id=user["id"], listing_id=listing_id, meta=str(price))
     await cb.message.answer(
-        f"\U0001F501 Объявление <b>#{listing_id}</b> снова активно ещё на "
-        f"<b>{config.LISTING_DAYS} дней</b>.",
+        f"\U0001F501 Объявление <b>#{listing_id}</b> активно ещё на "
+        f"<b>{config.LISTING_WEEK_DAYS} дней</b> (списано <b>{price}</b> леев с баланса).",
         parse_mode="HTML", reply_markup=keyboards.main_menu(),
     )
 

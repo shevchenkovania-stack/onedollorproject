@@ -64,6 +64,28 @@ CARD_PRICE_CENTS = int(os.getenv("CARD_PRICE_CENTS", "500"))
 # Button appears only when the store is actually wired up; webhook needs the secret too.
 CARD_ENABLED = bool(LS_API_KEY and LS_STORE_ID and LS_VARIANT_ID)
 
+# --- Monetization: one small MDL balance wallet ------------------------------
+# Every paid service draws from a single per-user balance (users.balance_mdl): the owner tops it
+# up in lump sums over MIA/card (few manual reconciliations, real amounts), then a 1-leu weekly
+# renewal or a 20-leu "Срочно" is spent instantly - no 1-leu bank transfer to chase.
+# PAID_ENABLED=0 keeps the whole board free: the working horse stays free until the board has
+# real supply, and flipping this one flag is the entire switch (every charge no-ops when off).
+PAID_ENABLED = os.getenv("PAID_ENABLED", "0").strip().lower() in ("1", "true", "yes", "on")
+PRICE_LISTING_MDL = int(os.getenv("PRICE_LISTING_MDL", "1"))         # a one-bedroom stays on the board
+PRICE_HIGHLIGHT_MDL = int(os.getenv("PRICE_HIGHLIGHT_MDL", "20"))    # the "Срочно" badge (~1$)
+PRICE_ALERTS_MDL = int(os.getenv("PRICE_ALERTS_MDL", "40"))          # saved-search push (~2$)
+ALERTS_DISPLAY = os.getenv("ALERTS_DISPLAY", "2$")                   # how the alerts price reads to a person
+LISTING_WEEK_DAYS = int(os.getenv("LISTING_WEEK_DAYS", "7"))         # days one leu buys
+HIGHLIGHT_DAYS = int(os.getenv("HIGHLIGHT_DAYS", "7"))               # days the "Срочно" badge lives
+ALERTS_MONTH_DAYS = int(os.getenv("ALERTS_MONTH_DAYS", "30"))        # days a search subscription lives
+# Cold-start hook: the FIRST published listing of every owner is free for FREE_FIRST_DAYS, so a
+# board with no supply never asks anyone for money before they have felt the value.
+FREE_FIRST_LISTING = os.getenv("FREE_FIRST_LISTING", "1").strip().lower() in ("1", "true", "yes", "on")
+FREE_FIRST_DAYS = int(os.getenv("FREE_FIRST_DAYS", "7"))
+# Lump-sum top-up amounts offered in the bot (MDL). Big first preset keeps MIA ticks rare.
+TOPUP_PRESETS = [int(x) for x in os.getenv("TOPUP_PRESETS", "30,50,100,200")
+                 .replace(" ", "").split(",") if x.strip().isdigit()]
+
 # Revenue loop: remind owners of unboosted active listings to buy a Boost.
 NUDGE_AFTER_DAYS = int(os.getenv("NUDGE_AFTER_DAYS", "2"))
 NUDGE_COOLDOWN_DAYS = int(os.getenv("NUDGE_COOLDOWN_DAYS", "4"))

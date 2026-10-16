@@ -1,3 +1,4 @@
+import datetime
 import html
 import os
 
@@ -36,10 +37,24 @@ def hashtags(row) -> str:
     return " ".join(tags)
 
 
+def _featured(row) -> bool:
+    """Paid "Срочно" badge is live when featured_until is set and in the future."""
+    try:
+        v = row["featured_until"]
+    except (IndexError, KeyError):
+        return False
+    return bool(v and str(v) > _now_str())
+
+
+def _now_str() -> str:
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
 def listing_caption(row, show_status: bool = False) -> str:
     deal = DEAL_LABELS.get(row["deal"], row["deal"])
     ptype = PTYPE_LABELS.get(row["ptype"], row["ptype"])
-    lines = [f"<b>#{row['id']} · {deal} · {ptype}</b>"]
+    badge = "\U0001F525 <b>СРОЧНО</b> · " if _featured(row) else ""
+    lines = [f"<b>#{row['id']} · {badge}{deal} · {ptype}</b>"]
     parts = []
     if row["rooms"]:
         parts.append(f"{row['rooms']} комн.")

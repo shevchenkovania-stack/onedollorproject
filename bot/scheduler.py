@@ -72,6 +72,11 @@ async def notify_search_subscribers(bot: Bot, listing) -> int:
             continue
         if not _alert_match(a, listing):
             continue
+        # Paid board: a saved search only delivers while its subscription is live. The DB check is
+        # short-circuited behind the flag, so the free board (PAID_ENABLED=0) still pushes to every
+        # watcher and the alert clock is never consulted.
+        if config.PAID_ENABLED and not await db.is_alerts_subscribed(a["user_id"]):
+            continue
         deal = _DEAL_LABEL.get(listing["deal"], listing["deal"] or "")
         dist = listing["district"] or "\u2014"
         cur = listing["currency"] or ""

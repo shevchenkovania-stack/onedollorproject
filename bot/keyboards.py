@@ -30,13 +30,32 @@ def board_label() -> str:
     return "доску"
 
 
+# --- price copy, always from config (never a hardcoded number in a label) -----
+
+def listing_price_label() -> str:
+    return f"\U0001F501 Продлить · {config.PRICE_LISTING_MDL} лей"
+
+
+def highlight_price_label() -> str:
+    return f"\U0001F525 Срочно · {config.PRICE_HIGHLIGHT_MDL} леев"
+
+
+def alerts_price_label() -> str:
+    display = config.ALERTS_DISPLAY or f"{config.PRICE_ALERTS_MDL} леев"
+    return f"\U0001F514 Уведомления · {display}/мес"
+
+
 def main_menu() -> InlineKeyboardMarkup:
     kb = [
         [InlineKeyboardButton(text=SEARCH, callback_data="menu:search")],
         [InlineKeyboardButton(text=add_label(), callback_data="menu:add")],
         [InlineKeyboardButton(text=MY, callback_data="menu:my")],
-        [InlineKeyboardButton(text=HELP, callback_data="menu:help")],
     ]
+    if config.PAID_ENABLED:
+        # a wallet button only makes sense once the board charges; when PAID_ENABLED=0 the
+        # horse stays free and there is nothing to top up.
+        kb.append([InlineKeyboardButton(text="\U0001F4B3 Кошелёк · пополнить", callback_data="wallet:menu")])
+    kb.append([InlineKeyboardButton(text=HELP, callback_data="menu:help")])
     if config.WEBAPP_URL:
         kb.insert(1, [InlineKeyboardButton(text=f"\U0001F4F1 Открыть {board_label()}", web_app=WebAppInfo(url=config.WEBAPP_URL))])
     if config.CHANNEL_URL:
@@ -81,11 +100,18 @@ def listing_kb(listing_id: int, owner: bool, boosted: bool,
     if owner:
         # Stage 4: the owner can close out their own ad - sold / extend / delete (all reversible
         # via Продлить, since archiving only takes it off the board and keeps the row).
+        extend_label = "\U0001F501 Продлить"
+        if config.PAID_ENABLED:
+            extend_label = listing_price_label()
         rows.append([
             InlineKeyboardButton(text="\u2705 Сдано", callback_data=f"sold:{listing_id}"),
-            InlineKeyboardButton(text="\U0001F501 Продлить", callback_data=f"extend:{listing_id}"),
+            InlineKeyboardButton(text=extend_label, callback_data=f"extend:{listing_id}"),
             InlineKeyboardButton(text="\U0001F5D1 Удалить", callback_data=f"delete:{listing_id}"),
         ])
+        if config.PAID_ENABLED:
+            # the paid highlight: one tap buys the "Срочно" badge (spent from the wallet).
+            rows.append([InlineKeyboardButton(text=highlight_price_label(),
+                                              callback_data=f"hl:{listing_id}")])
     if not owner:
         # every opened card is a recruitment moment: a viewer who is looking at someone
         # else's listing is one tap from being an owner. Put the pitch right before they
@@ -241,6 +267,12 @@ def boost_kb(listing_id: int, gift_credits: int = 0) -> InlineKeyboardMarkup:
         rows.append([InlineKeyboardButton(
             text=f"\U0001F381 Поднять бесплатно (осталось {gift_credits})",
             callback_data=f"gift:{listing_id}")])
+    if config.PAID_ENABLED and config.BOOST_MDL:
+        # the wallet is the lowest-friction rail: money is already in, no transfer to chase, the
+        # top spot lights up on the tap itself.
+        rows.append([InlineKeyboardButton(
+            text=f"\u26A1 Из кошелька · {config.BOOST_MDL} леев",
+            callback_data=f"boostwallet:{listing_id}")])
     if config.CARD_ENABLED:
         # hosted checkout: no card attached to Telegram and no acquiring contract needed
         rows.append([InlineKeyboardButton(text=f"\U0001F4B3 Картой {usd(config.CARD_PRICE_CENTS)}",
@@ -303,6 +335,69 @@ def manual_refund_confirm_kb(boost_id: int, listing_id: int) -> InlineKeyboardMa
         [InlineKeyboardButton(text="\u2705 Да, я перевёл деньги обратно",
                               callback_data=f"manrefyes:{boost_id}"),
          InlineKeyboardButton(text="\u2b05\uFE0F Отмена", callback_data=f"view:{listing_id}")],
+    ])
+
+
+# --- wallet / top-up keyboards ------------------------------------------------
+
+def wallet_menu_kb(balance: int) -> InlineKeyboardMarkup:
+    """Pick a lump sum to move into the wallet. Big presets on purpose: one MIA transfer buys
+    weeks of renewals, so the admin reconciles rarely instead of once per leu."""
+    rows, pair = [], []
+    for a in (config.TOPUP_PRESETS or [30, 50, 100]):
+        pair.append(InlineKeyboardButton(text=f"\U0001F4B0 {a} леев", callback_data=f"tup:{a}"))
+        if len(pair) == 2:
+            rows.append(pair)
+            pair = []
+    if pair:
+        rows.append(pair)
+    rows.append([InlineKeyboardButton(text=alerts_price_label(), callback_data="alerts:sub")])
+    rows.append([InlineKeyboardButton(text="\u2b05\uFE0F Меню", callback_data="menu:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def topup_reference(topup_id: int) -> str:
+    """The comment the buyer writes in their banking app so we can find this exact top-up."""
+    return f"Topup #{topup_id}"
+
+
+def topup_pitch(topup_id: int, amount: int) -> str:
+    """How to send a lump sum, written for a person holding a Moldovan banking app."""
+    lines = []
+    if config.PAY_PHONE:
+        lines.append(config.PAY_PHONE)
+    if config.PAY_NAME:
+        lines.append(config.PAY_NAME)
+    if config.PAY_INFO:
+        lines.append(config.PAY_INFO)
+    lines.append(topup_reference(topup_id))
+    block = "<code>" + html.escape("\n".join(lines)) + "</code>"
+    if config.PAY_PHONE:
+        return (f"\U0001F4B3 <b>Пополнить кошелёк на {amount} леев</b>\n\n"
+                "1. В приложении банка открой <b>MIA · Мгновенные платежи</b> → «Перевод P2P».\n"
+                f"2. Введи номер получателя и сумму <b>{amount} MDL</b>.\n"
+                f"3. Комментарием напиши блок ниже — по нему мы найдём твой платёж.\n\n{block}\n\n"
+                "Деньги приходят мгновенно. Как отправишь — нажми «Я отправил».")
+    details = html.escape(config.PAY_INFO) if config.PAY_INFO else "реквизиты пришлёт модератор"
+    return (f"\U0001F4B3 <b>Пополнить кошелёк на {amount} леев</b>\n\n"
+            f"Переведи <b>{amount} MDL</b>: {details}\n"
+            f"Комментарий: <b>{topup_reference(topup_id)}</b>.\n\n"
+            "Когда отправишь — нажми «Я отправил», модератор проверит и зачислит леев на баланс.")
+
+
+def topup_sent_kb(topup_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="\u2705 Я отправил", callback_data=f"tuppaid:{topup_id}")],
+        [InlineKeyboardButton(text="\u2b05\uFE0F Отмена", callback_data="wallet:menu")],
+    ])
+
+
+def topup_review_kb(topup_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="\u2705 Деньги пришли", callback_data=f"tupok:{topup_id}"),
+            InlineKeyboardButton(text="\u274C Не вижу платежа", callback_data=f"tupno:{topup_id}"),
+        ],
     ])
 
 

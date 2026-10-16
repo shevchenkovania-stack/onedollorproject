@@ -37,9 +37,19 @@ async def moderate(cb: CallbackQuery, bot: Bot) -> None:
         await cb.message.answer(f"Уже обработано (статус: {row['status']}).")
         return
     status = "active" if action == "approve" else "rejected"
+    first_free = False
     if status == "active":
         # Stage 4: an approved ad goes live with a real end date, not forever.
-        await db.activate_listing(listing_id, config.LISTING_DAYS)
+        # Paid board: a live week costs one leu, but the FIRST published ad is free for a week -
+        # the cold-start hook that makes someone post even when the board is empty. The check runs
+        # before activation (activate flips status, and "has published" counts any live/archived ad).
+        days = config.LISTING_DAYS
+        if config.PAID_ENABLED:
+            if config.FREE_FIRST_LISTING and not await db.has_published_listing(row["user_id"]):
+                days, first_free = config.FREE_FIRST_DAYS, True
+            else:
+                days = config.LISTING_WEEK_DAYS
+        await db.activate_listing(listing_id, days)
     else:
         await db.set_listing_status(listing_id, status)
     await db.log_event(f"moderation_{action}", listing_id=listing_id)
@@ -50,6 +60,9 @@ async def moderate(cb: CallbackQuery, bot: Bot) -> None:
         if status == "active":
             note = (f"\u2705 Твоё объявление <b>#{listing_id}</b> одобрено и опубликовано!\n"
                     "Его уже видят в поиске и в канале. Хочешь быть первым? Жми Boost \U0001F680")
+            if first_free:
+                note += (f"\n\n\U0001F381 Первое объявление — неделя бесплатно. Дальше продление "
+                         f"по <b>{config.PRICE_LISTING_MDL}</b> лей за неделю.")
             try:
                 await publish.publish_listing(bot, row)
             except Exception as e:

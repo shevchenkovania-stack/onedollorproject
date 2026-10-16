@@ -11,7 +11,7 @@ import db
 import jobs
 import scheduler
 from fsm_sqlite import SqliteStorage
-from handlers import add, admin, boost, browse, fallback, profile, start
+from handlers import add, admin, boost, browse, fallback, profile, start, wallet
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("chiriebot")
@@ -29,6 +29,8 @@ async def set_commands(bot: Bot) -> None:
                    description="Сдам однушку бесплатно" if focused else "Подать объявление бесплатно"),
         BotCommand(command="menu", description="Меню"),
     ]
+    if config.PAID_ENABLED:
+        default.insert(3, BotCommand(command="balance", description="Кошелёк · пополнить"))
     await bot.set_my_commands(default)
     # bug #6: /stats is an admin command - show it only in each admin's own menu, not to everyone.
     admin_cmds = default + [BotCommand(command="stats", description="Статистика (админ)")]
@@ -57,6 +59,7 @@ async def main() -> None:
     dp.include_router(browse.router)
     dp.include_router(profile.router)
     dp.include_router(boost.router)
+    dp.include_router(wallet.router)
     dp.include_router(admin.router)
     # last: only sees plain text that no other router handled (no command, no active FSM state)
     dp.include_router(fallback.router)

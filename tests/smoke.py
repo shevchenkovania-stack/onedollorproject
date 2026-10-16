@@ -28,10 +28,10 @@ def test_imports_and_dispatcher():
     import config
     config.BOT_TOKEN = ""  # keep the import side-effect free
     import render, keyboards, publish, scheduler  # noqa: F401
-    from handlers import start, add, browse, profile, boost, admin, fallback
+    from handlers import start, add, browse, profile, boost, admin, fallback, wallet
     dp = Dispatcher()
     for r in (start.router, add.router, browse.router, profile.router,
-              boost.router, admin.router, fallback.router):
+              boost.router, wallet.router, admin.router, fallback.router):
         dp.include_router(r)  # raises on a bad decorator / duplicate route
     return dp
 
@@ -73,6 +73,10 @@ def test_keyboards_build():
         keyboards.boost_pitch(),
         keyboards.manual_pitch(row["id"]),
         keyboards.pay_block(row["id"]),
+        keyboards.wallet_menu_kb(row["id"]),
+        keyboards.topup_pitch(3, 50),
+        keyboards.topup_sent_kb(3),
+        keyboards.topup_review_kb(3),
     ]
     for b in built:
         if isinstance(b, str):
@@ -107,7 +111,7 @@ def test_callback_coverage():
     nothing when tapped = the failure mode this check exists to catch."""
     src_files = ["keyboards.py", "render.py", "publish.py", "scheduler.py"] \
         + ["handlers/" + f for f in ("start.py", "add.py", "browse.py", "profile.py",
-                                     "boost.py", "admin.py", "fallback.py")]
+                                     "boost.py", "wallet.py", "admin.py", "fallback.py")]
     emitted = set()
     handled = set()
     for rel in src_files:
