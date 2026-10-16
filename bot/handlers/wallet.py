@@ -69,6 +69,24 @@ async def start_topup(cb: CallbackQuery) -> None:
                             reply_markup=keyboards.topup_sent_kb(topup_id))
 
 
+@router.callback_query(F.data == "pack:buy")
+async def buy_pack(cb: CallbackQuery) -> None:
+    """Open the $1 promotion pack: a top-up of PACK_PRICE_MDL (real money) that credits
+    PACK_CREDIT_MDL of promo leu (10x). Money flow is identical to a wallet top-up - the buyer
+    reports the MIA transfer, an admin ticks it, approve_topup grants the credit and the badge.
+    Nothing is charged or granted until a real transfer is confirmed, so this is safe to ship."""
+    if not config.PAID_ENABLED or not config.PACK_ENABLED or not config.pack_rail_ready():
+        await cb.answer("Пакет пока недоступен.", show_alert=True)
+        return
+    await cb.answer()
+    user = await db.get_or_create_user(cb.from_user.id, cb.from_user.username, cb.from_user.first_name)
+    topup_id = await db.create_topup(user["id"], cb.from_user.id, config.PACK_PRICE_MDL,
+                                     credit_mdl=config.PACK_CREDIT_MDL, kind="pack")
+    await db.log_event("pack_started", user_id=user["id"], meta=str(topup_id))
+    await cb.message.answer(keyboards.pack_pitch(topup_id), parse_mode="HTML",
+                            reply_markup=keyboards.topup_sent_kb(topup_id))
+
+
 @router.callback_query(F.data.startswith("tuppaid:"))
 async def claim_sent(cb: CallbackQuery, bot: Bot) -> None:
     """The buyer says the transfer is out. We do not credit yet - we hand the admin a tick-list."""
@@ -106,7 +124,12 @@ async def claim_sent(cb: CallbackQuery, bot: Bot) -> None:
 
 @router.callback_query(F.data.startswith("tupok:"))
 async def approve_topup(cb: CallbackQuery, bot: Bot) -> None:
-    """Admin saw the money: credit the wallet (idempotent) and book the only revenue row."""
+    """Admin saw the money: credit the wallet (idempotent) and book the only revenue row.
+
+    A pack top-up credits MORE leu than the money received (the 10x promo grant). Revenue is still
+    exactly the money that arrived (amount_mdl) - the extra credit is marketing, never revenue - so
+    REAL_REVENUE stays honest while the buyer feels the 10x value. A pack among the first
+    FOUNDING_SLOTS also stamps a founding slot (the status/scarcity hook)."""
     if not _is_admin(cb.from_user.id):
         await cb.answer("Нет доступа", show_alert=True)
         return
@@ -116,22 +139,38 @@ async def approve_topup(cb: CallbackQuery, bot: Bot) -> None:
     if not row:
         await cb.message.answer("Заявка не найдена или уже зачислена.")
         return
+    is_pack = (row["kind"] == "pack")
+    credited = int(row["credit_mdl"]) if row["credit_mdl"] is not None else int(row["amount_mdl"])
     try:
         await cb.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    # real leu arrived -> this is the revenue record (currency MDL, counted by stats)
-    await db.log_payment(user_id=row["user_id"], listing_id=None, purpose="topup", stars=0,
-                         currency="MDL", telegram_charge_id=f"topup:{topup_id}",
+    # real leu arrived -> this is the revenue record. amount = money received, NOT the promo grant.
+    await db.log_payment(user_id=row["user_id"], listing_id=None, purpose=("pack" if is_pack else "topup"),
+                         stars=0, currency="MDL", telegram_charge_id=f"topup:{topup_id}",
                          provider_charge_id=None, amount=float(row["amount_mdl"]))
     await db.log_event("topup_paid", user_id=row["user_id"], meta=str(row["amount_mdl"]))
     bal = await db.get_balance(row["user_id"])
-    await cb.message.answer(f"\u2705 Пополнение #{topup_id}: <b>{row['amount_mdl']}</b> леев зачислено. "
-                            f"Баланс: <b>{bal}</b> леев.", parse_mode="HTML")
+    note = ""
+    if is_pack:
+        slot = await db.claim_founding_slot(row["user_id"], config.FOUNDING_SLOTS)
+        await db.log_event("pack_paid", user_id=row["user_id"], meta=str(slot))
+        if slot:
+            note = (f"\n\n\U0001F3C6 Ты founding-участник <b>#{slot}</b> из <b>{config.FOUNDING_SLOTS}</b>. "
+                    "Спасибо, что с нами на старте!")
+    word = "Пакет" if is_pack else "Пополнение"
+    await cb.message.answer(f"\u2705 {word} #{topup_id}: зачислено <b>{credited}</b> леев "
+                            f"(получено {row['amount_mdl']} MDL). Баланс: <b>{bal}</b>.", parse_mode="HTML")
     try:
-        await bot.send_message(row["tg_id"],
-                               f"\U0001F4B3 Баланс пополнен на <b>{row['amount_mdl']}</b> леев. "
-                               f"Сейчас на кошельке <b>{bal}</b> леев.", parse_mode="HTML")
+        if is_pack:
+            mult = max(1, round(credited / row["amount_mdl"])) if row["amount_mdl"] else 0
+            buyer_msg = (f"\U0001F6E0️ <b>Пакет продвижения активирован!</b>\n"
+                         f"На кошелёк легло <b>{credited}</b> леев промо-баланса за <b>{row['amount_mdl']} MDL</b>"
+                         + (f" — в <b>{mult}×</b> по прайсу." if mult else ".")
+                         + f" Баланс: <b>{bal}</b>." + note)
+        else:
+            buyer_msg = f"\U0001F4B3 Баланс пополнен на <b>{credited}</b> леев. Сейчас на кошельке <b>{bal}</b>." + note
+        await bot.send_message(row["tg_id"], buyer_msg, parse_mode="HTML")
     except Exception:
         pass
 

@@ -50,7 +50,7 @@ def _now_str() -> str:
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def listing_caption(row, show_status: bool = False) -> str:
+def listing_caption(row, show_status: bool = False, founding: int = 0) -> str:
     deal = DEAL_LABELS.get(row["deal"], row["deal"])
     ptype = PTYPE_LABELS.get(row["ptype"], row["ptype"])
     badge = "\U0001F525 <b>СРОЧНО</b> · " if _featured(row) else ""
@@ -72,6 +72,10 @@ def listing_caption(row, show_status: bool = False) -> str:
     if row["description"]:
         lines.append("")
         lines.append(esc(row["description"]))
+    if founding:
+        # scarcity/status: a real paid founding member, visible to every viewer
+        lines.append("")
+        lines.append(f"\U0001F3C6 <b>Founding-участник #{founding}</b> · Однушка.md")
     lines.append("")
     lines.append(hashtags(row))
     if show_status:
@@ -82,7 +86,12 @@ def listing_caption(row, show_status: bool = False) -> str:
 
 async def send_listing(bot, chat_id: int, row, owner: bool = False, with_keyboard: bool = True) -> None:
     photos = db.listing_photos(row)
-    caption = listing_caption(row, show_status=owner)
+    owner_user = await db.get_user_by_id(row["user_id"])
+    try:
+        founding = int(owner_user["founding"]) if owner_user and owner_user["founding"] else 0
+    except (IndexError, KeyError, TypeError):
+        founding = 0
+    caption = listing_caption(row, show_status=owner, founding=founding)
     kb = keyboards.listing_kb(row["id"], owner, bool(row["boosted_until"]),
                               contacts=db.listing_contacts(row)) if with_keyboard else None
     if photos:

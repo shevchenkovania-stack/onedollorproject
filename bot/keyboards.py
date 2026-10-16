@@ -33,6 +33,9 @@ def board_label() -> str:
 # --- price copy, always from config (never a hardcoded number in a label) -----
 
 def listing_price_label() -> str:
+    # posting/keeping a listing live stays free (PRICE_LISTING_MDL=0); only promotion is sold.
+    if config.PRICE_LISTING_MDL <= 0:
+        return "\U0001F501 Продлить"
     return f"\U0001F501 Продлить · {config.PRICE_LISTING_MDL} лей"
 
 
@@ -45,6 +48,10 @@ def alerts_price_label() -> str:
     return f"\U0001F514 Уведомления · {display}/мес"
 
 
+def pack_price_label() -> str:
+    return f"\U0001F680 Пакет продвижения · {config.PACK_DISPLAY}"
+
+
 def main_menu() -> InlineKeyboardMarkup:
     kb = [
         [InlineKeyboardButton(text=SEARCH, callback_data="menu:search")],
@@ -52,6 +59,9 @@ def main_menu() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text=MY, callback_data="menu:my")],
     ]
     if config.PAID_ENABLED:
+        # the $1 promotion pack leads - it is the whole paid product (post & browse stay free).
+        if config.PACK_ENABLED and config.pack_rail_ready():
+            kb.append([InlineKeyboardButton(text=pack_price_label(), callback_data="pack:buy")])
         # a wallet button only makes sense once the board charges; when PAID_ENABLED=0 the
         # horse stays free and there is nothing to top up.
         kb.append([InlineKeyboardButton(text="\U0001F4B3 Кошелёк · пополнить", callback_data="wallet:menu")])
@@ -344,6 +354,9 @@ def wallet_menu_kb(balance: int) -> InlineKeyboardMarkup:
     """Pick a lump sum to move into the wallet. Big presets on purpose: one MIA transfer buys
     weeks of renewals, so the admin reconciles rarely instead of once per leu."""
     rows, pair = [], []
+    # the $1 pack leads the wallet too: the cheapest way in is the bundle, not a bare top-up.
+    if config.PACK_ENABLED and config.pack_rail_ready():
+        rows.append([InlineKeyboardButton(text=pack_price_label(), callback_data="pack:buy")])
     for a in (config.TOPUP_PRESETS or [30, 50, 100]):
         pair.append(InlineKeyboardButton(text=f"\U0001F4B0 {a} леев", callback_data=f"tup:{a}"))
         if len(pair) == 2:
@@ -383,6 +396,48 @@ def topup_pitch(topup_id: int, amount: int) -> str:
             f"Переведи <b>{amount} MDL</b>: {details}\n"
             f"Комментарий: <b>{topup_reference(topup_id)}</b>.\n\n"
             "Когда отправишь — нажми «Я отправил», модератор проверит и зачислит леев на баланс.")
+
+
+def pack_pitch(topup_id: int) -> str:
+    """The $1 promotion-pack offer: what the money buys, anchored to our own price list at ~10x,
+    the founding scarcity, the refund promise, and the MIA instruction. Every number from config."""
+    disp = config.PACK_DISPLAY
+    price = config.PACK_PRICE_MDL
+    credit = config.PACK_CREDIT_MDL
+    mult = max(1, round(credit / price)) if price else 10
+    hl = credit // config.PRICE_HIGHLIGHT_MDL if config.PRICE_HIGHLIGHT_MDL else 0
+    al = credit // config.PRICE_ALERTS_MDL if config.PRICE_ALERTS_MDL else 0
+    lines = []
+    if config.PAY_PHONE:
+        lines.append(config.PAY_PHONE)
+    if config.PAY_NAME:
+        lines.append(config.PAY_NAME)
+    if config.PAY_INFO:
+        lines.append(config.PAY_INFO)
+    lines.append(topup_reference(topup_id))
+    block = "<code>" + html.escape("\n".join(lines)) + "</code>"
+    stack = ("На что этого хватит:\n"
+             f"• \U0001F525 выделение «Срочно» — примерно <b>{hl}</b> периодов\n"
+             f"• \U0001F514 уведомления о новых однушках — примерно <b>{al}</b> мес.\n"
+             "• \U0001F680 поднятия в топ и продление объявлений")
+    head = (f"\U0001F680 <b>Пакет продвижения · {disp}</b>\n\n"
+            f"Платишь <b>{disp}</b> ({price} MDL), а на кошелёк ложится <b>{credit} леев</b> "
+            f"промо-баланса — по нашему прайсу это ровно <b>в {mult}×</b> больше, чем ты платишь.\n\n"
+            f"{stack}\n\n"
+            f"\U0001F3C6 Первые <b>{config.FOUNDING_SLOTS}</b> — статус founding-участника и бейдж "
+            f"на объявлении.\nНе поднимем в топ — вернём {disp}.")
+    if config.PAY_PHONE:
+        pay = ("\n\n\u26A1 <b>Как оплатить</b>\n"
+               "1. В приложении банка открой <b>MIA · Мгновенные платежи</b> → «Перевод P2P».\n"
+               f"2. Введи номер получателя и сумму <b>{price} MDL</b>.\n"
+               f"3. Комментарием напиши блок ниже — по нему мы найдём твой платёж.\n\n{block}\n\n"
+               "Деньги приходят мгновенно. Как отправишь — нажми «Я отправил».")
+    else:
+        details = html.escape(config.PAY_INFO) if config.PAY_INFO else "реквизиты пришлёт модератор"
+        pay = (f"\n\nПереведи <b>{price} MDL</b>: {details}\n"
+               f"Комментарий: <b>{topup_reference(topup_id)}</b>.\n"
+               "Нажми «Я отправил» — модератор проверит и включит пакет.")
+    return head + pay
 
 
 def topup_sent_kb(topup_id: int) -> InlineKeyboardMarkup:

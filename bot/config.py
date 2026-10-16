@@ -86,6 +86,24 @@ FREE_FIRST_DAYS = int(os.getenv("FREE_FIRST_DAYS", "7"))
 TOPUP_PRESETS = [int(x) for x in os.getenv("TOPUP_PRESETS", "30,50,100,200")
                  .replace(" ", "").split(",") if x.strip().isdigit()]
 
+# --- $1 promotion pack (the founding offer) ----------------------------------
+# Posting and browsing stay free; the ONLY thing we sell is promotion. One MIA transfer of
+# PACK_PRICE_MDL (the "1 $" the buyer reads) lands PACK_CREDIT_MDL of promo leu on the wallet -
+# PACK_CREDIT/PACK_PRICE = 10, so the $1 is anchored to our own price list as ~10x value. The
+# extra credit above the money received is a marketing grant, never revenue: stats() counts only
+# the real PACK_PRICE_MDL that arrives (the top-up row keeps amount_mdl = money, credit_mdl = grant).
+# PACK_ENABLED only lights the button when the board is paid AND a MDL rail is wired (PAY_*/MIA).
+PACK_PRICE_MDL = int(os.getenv("PACK_PRICE_MDL", "18"))              # real MDL received for the pack (~$1)
+PACK_CREDIT_MDL = int(os.getenv("PACK_CREDIT_MDL", "180"))           # promo leu granted (10x the money)
+PACK_DISPLAY = os.getenv("PACK_DISPLAY", "1 $")                      # how the price reads to a person
+PACK_ENABLED = os.getenv("PACK_ENABLED", "1").strip().lower() in ("1", "true", "yes", "on")
+# First FOUNDING_SLOTS pack buyers are stamped a founding member (users.founding = slot 1..N) and
+# carry a badge - the scarcity/status hook. Counted from real paid packs, so it can't be farmed.
+FOUNDING_SLOTS = int(os.getenv("FOUNDING_SLOTS", "10"))
+def pack_rail_ready() -> bool:
+    """A pack needs an actual way to receive the leu: MIA phone, or fallback pay details."""
+    return bool(PAY_PHONE or PAY_INFO)
+
 # Revenue loop: remind owners of unboosted active listings to buy a Boost.
 NUDGE_AFTER_DAYS = int(os.getenv("NUDGE_AFTER_DAYS", "2"))
 NUDGE_COOLDOWN_DAYS = int(os.getenv("NUDGE_COOLDOWN_DAYS", "4"))

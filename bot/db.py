@@ -156,6 +156,9 @@ async def _migrate() -> None:
     if "alerts_until" not in cols:
         # a saved-search subscription is paid: alerts push only while now < alerts_until
         await _conn.execute("ALTER TABLE users ADD COLUMN alerts_until TEXT")
+    if "founding" not in cols:
+        # founding-member slot (1..FOUNDING_SLOTS) stamped on the first pack buyers; 0 = not a member
+        await _conn.execute("ALTER TABLE users ADD COLUMN founding INTEGER NOT NULL DEFAULT 0")
     cur = await _conn.execute("PRAGMA table_info(listings)")
     cols = {r["name"] for r in await cur.fetchall()}
     if "featured_until" not in cols:
@@ -185,6 +188,14 @@ async def _migrate() -> None:
     if "order_ref" not in cols:
         # without this a refund cannot be traced back to the boost it must switch off
         await _conn.execute("ALTER TABLE boosts ADD COLUMN order_ref TEXT")
+    cur = await _conn.execute("PRAGMA table_info(topups)")
+    cols = {r["name"] for r in await cur.fetchall()}
+    if "credit_mdl" not in cols:
+        # promo leu to grant, when it differs from the money received ($1 pack credits 10x)
+        await _conn.execute("ALTER TABLE topups ADD COLUMN credit_mdl INTEGER")
+    if "kind" not in cols:
+        # 'wallet' = a plain top-up; 'pack' = the $1 promotion bundle (drives the founding badge)
+        await _conn.execute("ALTER TABLE topups ADD COLUMN kind TEXT NOT NULL DEFAULT 'wallet'")
 
 
 async def close_db() -> None:
@@ -311,13 +322,46 @@ async def has_published_listing(user_id: int) -> bool:
     return await cur.fetchone() is not None
 
 
+# --- founding members: the first FOUNDING_SLOTS pack buyers, stamped for life --
+
+async def count_founding_members() -> int:
+    cur = await _db().execute("SELECT COUNT(*) c FROM users WHERE founding > 0")
+    return (await cur.fetchone())["c"]
+
+
+async def claim_founding_slot(user_id: int, slots: int) -> int:
+    """Stamp the next founding slot on a user who just paid a pack, capped at `slots`. Returns the
+    slot granted (1..N), the user's existing slot if already stamped, or 0 once the slots are gone.
+    Counting distinct stamped users keeps the scarcity real: re-approving one payment cannot mint a
+    second slot, and a buyer never loses the slot number they earned on their first pack."""
+    db = _db()
+    cur = await db.execute("SELECT founding FROM users WHERE id = ?", (user_id,))
+    row = await cur.fetchone()
+    if not row:
+        return 0
+    if row["founding"] and int(row["founding"]) > 0:
+        return int(row["founding"])
+    used = await count_founding_members()
+    if used >= slots:
+        return 0
+    slot = used + 1
+    cur = await db.execute("UPDATE users SET founding = ? WHERE id = ? AND founding = 0", (slot, user_id))
+    await db.commit()
+    return slot if cur.rowcount > 0 else 0
+
+
 # --- top-ups: a lump-sum report an admin (or the card webhook) credits --------
 
-async def create_topup(user_id: int, tg_id: int, amount_mdl: int) -> int:
+async def create_topup(user_id: int, tg_id: int, amount_mdl: int,
+                       credit_mdl: int | None = None, kind: str = "wallet") -> int:
+    """Open a pending top-up. amount_mdl = real money the buyer transfers (the revenue).
+    credit_mdl = leu to actually grant the wallet (a $1 pack grants 10x). When credit_mdl is
+    None the two coincide (a plain wallet top-up)."""
     db = _db()
+    credit = int(credit_mdl) if credit_mdl is not None else int(amount_mdl)
     cur = await db.execute(
-        "INSERT INTO topups (user_id, tg_id, amount_mdl) VALUES (?, ?, ?)",
-        (user_id, tg_id, int(amount_mdl)))
+        "INSERT INTO topups (user_id, tg_id, amount_mdl, credit_mdl, kind) VALUES (?, ?, ?, ?, ?)",
+        (user_id, tg_id, int(amount_mdl), credit, kind))
     await db.commit()
     return cur.lastrowid
 
@@ -339,8 +383,10 @@ async def credit_topup(topup_id: int) -> aiosqlite.Row | None:
     if cur.rowcount == 0:
         await db.commit()
         return None
+    # grant the leu (a pack grants credit_mdl > amount_mdl; the extra is marketing, not revenue)
+    credit = int(row["credit_mdl"]) if row["credit_mdl"] is not None else int(row["amount_mdl"])
     await db.execute("UPDATE users SET balance_mdl = balance_mdl + ? WHERE id = ?",
-                     (row["amount_mdl"], row["user_id"]))
+                     (credit, row["user_id"]))
     await db.commit()
     return row
 
