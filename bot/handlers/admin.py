@@ -227,13 +227,23 @@ async def stats(message: Message) -> None:
     await message.answer(text, parse_mode="HTML")
 
 
+@router.message(Command("traffic"))
+async def traffic(message: Message) -> None:
+    """Owner-facing funnel snapshot: is anyone even seeing the board? Last 14 days."""
+    if not is_admin(message.from_user.id):
+        return
+    rows = await db.daily_stats(14)
+    await message.answer(db.format_traffic(rows), parse_mode="HTML")
+
+
 @router.message(Command("admin"))
 async def admin_help(message: Message) -> None:
     if not is_admin(message.from_user.id):
         return
     await message.answer(
         "Админ-команды:\n"
-        "/stats — статистика\n"
+        "/stats — статистика денег\n"
+        "/traffic — трафик по дням (за 14 дней)\n"
         "/pending — объявления на модерации\n"
         "/nudge — сразу предложить Boost тем, кто не в топе\n"
         "/broadcast <текст> — рассылка всем пользователям бота",

@@ -191,6 +191,12 @@ async def api_listings(request: web.Request) -> web.Response:
     rows = await cur.fetchall()
     cur = await db.execute(f"SELECT COUNT(*) c FROM listings WHERE {where}", args)
     total = (await cur.fetchone())["c"]
+    # traffic counter: any board load = one "web_open" row. Distinct user_id / day is what the
+    # owner actually reads ("сколько людей зашли на доску сегодня"). Anon loads still count as
+    # opens (user_id NULL) so a link preview visit is not invisible.
+    await db.execute("INSERT INTO events (name, user_id) VALUES ('web_open', ?)",
+                     ((auth_user(request) or {}).get("id"),))
+    await db.commit()
     items = [row_to_item(r) for r in rows]
     return web.json_response({"total": total, "page": page, "per": per, "items": items})
 

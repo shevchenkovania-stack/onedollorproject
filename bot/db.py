@@ -1,4 +1,5 @@
 import json
+from datetime import date, timedelta
 from typing import Any, Optional
 
 import aiosqlite
@@ -1001,3 +1002,88 @@ async def stats() -> dict:
         row = await cur.fetchone()
         out[name] = row["c"]
     return out
+
+
+async def daily_stats(days: int = 7) -> list[dict]:
+    """Per-day traffic rollup, newest first, exactly `days` rows (empty days filled with zeros).
+
+    The owner reads this to answer one question: is anyone seeing the board at all. So the counts
+    are: bot /start hits, Mini App board loads (web_open, includes anon), card detail views
+    (web_view), phone reveals (web_contact), new ads (listing_created), search-alert deliveries
+    (sum of search_alert_push.meta), and new registered users.
+    """
+    db = _db()
+    window = f"-{int(days)} days"
+    q = (
+        "SELECT date(created_at) day,"
+        " SUM(CASE WHEN name='start' THEN 1 ELSE 0 END) bot_opens,"
+        " COUNT(DISTINCT CASE WHEN name='start' THEN user_id END) bot_uniq,"
+        " SUM(CASE WHEN name='web_open' THEN 1 ELSE 0 END) app_opens,"
+        " COUNT(DISTINCT CASE WHEN name='web_open' THEN user_id END) app_uniq,"
+        " SUM(CASE WHEN name='web_view' THEN 1 ELSE 0 END) card_views,"
+        " SUM(CASE WHEN name='web_contact' THEN 1 ELSE 0 END) contacts,"
+        " SUM(CASE WHEN name='listing_created' THEN 1 ELSE 0 END) new_ads,"
+        " COALESCE(SUM(CASE WHEN name='search_alert_push' THEN CAST(meta AS INTEGER) ELSE 0 END), 0) alerts"
+        " FROM events WHERE created_at >= datetime('now', ?) GROUP BY 1"
+    )
+    cur = await db.execute(q, (window,))
+    by_day = {r["day"]: dict(r) for r in await cur.fetchall()}
+    cur2 = await db.execute(
+        "SELECT date(created_at) day, COUNT(*) c FROM users WHERE created_at >= datetime('now', ?) GROUP BY 1",
+        (window,))
+    users_by_day = {r["day"]: r["c"] for r in await cur2.fetchall()}
+    # SQLite stores created_at in UTC; date.today() here uses the server clock (VPS is UTC+0).
+    # If the VPS ever shifts to local time, align with `datetime('now')` semantics instead.
+    today = date.today()
+    out: list[dict] = []
+    for i in range(days):
+        d = (today - timedelta(days=i)).isoformat()
+        r = by_day.get(d, {})
+        out.append({
+            "day": d,
+            "bot_opens":  int(r.get("bot_opens", 0) or 0),
+            "bot_uniq":   int(r.get("bot_uniq", 0) or 0),
+            "app_opens":  int(r.get("app_opens", 0) or 0),
+            "app_uniq":   int(r.get("app_uniq", 0) or 0),
+            "card_views": int(r.get("card_views", 0) or 0),
+            "contacts":   int(r.get("contacts", 0) or 0),
+            "new_ads":    int(r.get("new_ads", 0) or 0),
+            "alerts":     int(r.get("alerts", 0) or 0),
+            "new_users":  int(users_by_day.get(d, 0) or 0),
+        })
+    return out
+
+
+_TRAFFIC_KEYS = ("bot_opens", "app_opens", "card_views", "contacts", "new_ads", "alerts", "new_users")
+
+
+def format_traffic(rows: list[dict], title: str = "Трафик по дням") -> str:
+    """Pure formatter (no DB), so /traffic and the daily digest share one style."""
+    if not rows:
+        return f"<b>{title}</b>: нет данных"
+    lines = [f"<b>{title}</b> · {rows[-1]['day']} → {rows[0]['day']}"]
+    for r in rows:
+        parts = []
+        if r["bot_opens"]:
+            parts.append(f"бот {r['bot_opens']}× ({r['bot_uniq']} чел)")
+        if r["app_opens"]:
+            parts.append(f"app {r['app_opens']}× ({r['app_uniq']} чел)")
+        if r["card_views"]:
+            parts.append(f"карточек {r['card_views']}")
+        if r["contacts"]:
+            parts.append(f"телефон {r['contacts']}")
+        if r["new_ads"]:
+            parts.append(f"+{r['new_ads']} объяв")
+        if r["alerts"]:
+            parts.append(f"🔔 {r['alerts']}")
+        if r["new_users"]:
+            parts.append(f"+{r['new_users']} юзеров")
+        lines.append(f"{r['day']}: " + (" · ".join(parts) if parts else "— пусто —"))
+    tot = {k: sum(r[k] for r in rows) for k in _TRAFFIC_KEYS}
+    lines.append(
+        f"\n<b>Итого за {len(rows)} дн:</b> "
+        f"бот {tot['bot_opens']}, app {tot['app_opens']}, "
+        f"карточек {tot['card_views']}, телефонов {tot['contacts']}, "
+        f"объяв {tot['new_ads']}, 🔔 {tot['alerts']}, юзеров {tot['new_users']}"
+    )
+    return "\n".join(lines)

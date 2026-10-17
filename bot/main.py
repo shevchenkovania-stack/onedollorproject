@@ -33,7 +33,10 @@ async def set_commands(bot: Bot) -> None:
         default.insert(3, BotCommand(command="balance", description="Кошелёк · пополнить"))
     await bot.set_my_commands(default)
     # bug #6: /stats is an admin command - show it only in each admin's own menu, not to everyone.
-    admin_cmds = default + [BotCommand(command="stats", description="Статистика (админ)")]
+    admin_cmds = default + [
+        BotCommand(command="stats", description="Статистика денег (админ)"),
+        BotCommand(command="traffic", description="Трафик по дням (админ)"),
+    ]
     for chat_id in config.ADMIN_IDS:
         try:
             await bot.set_my_commands(admin_cmds, scope=BotCommandScopeChat(chat_id=chat_id))
