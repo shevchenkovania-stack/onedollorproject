@@ -118,6 +118,7 @@ def row_to_item(row, with_detail: bool = False) -> dict:
         "views": row["views"],
         "boosted": bool(row["boosted_until"] and row["boosted_until"] > time.strftime("%Y-%m-%d %H:%M:%S")),
         "featured": _ts_active(row, "featured_until"),
+        "demo": bool(row["is_demo"]) if "is_demo" in row.keys() else False,
         "photos": photo_urls(row["id"], len(json.loads(row["photos"] or "[]"))),
     }
     if with_detail:

@@ -48,6 +48,14 @@ select, input[type=number], input[type=tel], input[type=text] { flex: 1; min-wid
 .favchip { flex: 0 0 auto; padding: 9px 14px; border-radius: 11px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; }
 .favchip.on { background: #ffe3ea; color: #c2185b; border-color: #f6c6d4; }
 .found { padding: 12px 16px 0; font-size: 13px; color: var(--hint); font-weight: 600; }
+/* "как работает" — the onboarding banner every guest sees first; dismissible */
+.howto { margin: 12px 16px 0; padding: 14px 16px; border-radius: var(--radius); background: linear-gradient(135deg, #eafaf7, #e6f4f1); border: 1px solid color-mix(in srgb, var(--brand) 22%, transparent); position: relative; }
+.howto h3 { font-size: 15px; font-weight: 800; color: var(--brand-dark); display: flex; align-items: center; gap: 7px; }
+.howto ol { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 7px; }
+.howto li { font-size: 13.5px; line-height: 1.4; color: var(--text); }
+.howto li b { font-weight: 700; }
+.howto .note { margin-top: 10px; font-size: 12px; color: var(--brand-dark); background: rgba(255,255,255,.6); border-radius: 9px; padding: 7px 10px; }
+.howto .x { position: absolute; top: 10px; right: 12px; border: none; background: none; font-size: 16px; color: var(--hint); cursor: pointer; line-height: 1; }
 .grid { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px; }
 .card { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; cursor: pointer; position: relative; box-shadow: var(--shadow); transition: transform .12s; }
 .card:active { transform: scale(.99); }
@@ -61,6 +69,7 @@ select, input[type=number], input[type=tel], input[type=text] { flex: 1; min-wid
 .badge { font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 8px; background: rgba(20, 28, 36, .62); color: #fff; backdrop-filter: blur(4px); }
 .badge.boost { background: linear-gradient(135deg, #f7b733, #f5820b); color: #3a2600; }
 .badge.fire { background: linear-gradient(135deg, #ff512f, #dd2476); color: #fff; }
+.badge.demo { background: linear-gradient(135deg, #6a5cff, #9b51e0); color: #fff; }
 .pcount { position: absolute; bottom: 78px; right: 10px; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 8px; background: rgba(20, 28, 36, .62); color: #fff; backdrop-filter: blur(4px); }
 .fav { position: absolute; top: 8px; right: 8px; width: 34px; height: 34px; border-radius: 50%; border: none; background: rgba(255, 255, 255, .82); color: #b0413e; font-size: 17px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--shadow); }
 .fav.on { background: #fff; color: #e0245e; }
@@ -188,6 +197,18 @@ select, input[type=number], input[type=tel], input[type=text] { flex: 1; min-wid
   </div>
 </header>
 
+<div class="howto" id="howto">
+  <button class="x" onclick="dismissHowto()" aria-label="Закрыть">✕</button>
+  <h3>👋 Как это работает</h3>
+  <ol>
+    <li><b>Смотришь бесплатно.</b> Карточки однушек в Кишинёве — листай, фильтруй по району и цене.</li>
+    <li><b>Нравится — жми «Показать контакт».</b> Телефон хозяина открывается сразу, без комиссии и посредников.</li>
+    <li><b>Не хочешь листать?</b> Настрой фильтр и жми 🔔 — бот сам пришлёт новые однушки, когда они появятся.</li>
+    <li><b>Сдаёшь однушку?</b> Кнопка «➕ Добавить объявление» — бесплатно, пара минут.</li>
+  </ol>
+  <div class="note">🧪 Сейчас на доске — <b>демо-объявления</b> для витрины. Реальные квартиры появятся здесь же, как только хозяева начнут публиковаться.</div>
+</div>
+
 <div class="found" id="found"></div>
 <main class="grid" id="grid"></main>
 <div class="empty" id="empty" style="display:none">
@@ -291,6 +312,10 @@ async function api(path, opts={}) {
 
 function esc(s){ return (s??"").toString().replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
+// onboarding banner: once a guest closes it we remember and don't nag on the next visit.
+function dismissHowto(){ try { localStorage.setItem("gc_howto", "1"); } catch(e){} const b = document.getElementById("howto"); if (b) b.style.display = "none"; }
+try { if (localStorage.getItem("gc_howto") === "1") document.getElementById("howto").style.display = "none"; } catch(e){}
+
 function params() {
   const p = new URLSearchParams();
   for (const k of ["deal","district","ptype","rooms","price_max","sort"]) if (state[k]) p.set(k, state[k]);
@@ -319,7 +344,7 @@ function toggleFavOnly() {
 
 function cardHtml(it) {
   const img = it.photos.length ? `<img src="${it.photos[0]}" loading="lazy">` : `<div class="noimg">🏠</div>`;
-  const badges = `<div class="badges">${it.featured?'<span class="badge fire">🔥 Срочно</span>':''}${it.boosted?'<span class="badge boost">🚀 Boost</span>':''}<span class="badge">${esc(it.deal_label)}</span></div>`;
+  const badges = `<div class="badges">${it.demo?'<span class="badge demo">🧪 Демо</span>':''}${it.featured?'<span class="badge fire">🔥 Срочно</span>':''}${it.boosted?'<span class="badge boost">🚀 Boost</span>':''}<span class="badge">${esc(it.deal_label)}</span></div>`;
   const pc = it.photos.length > 1 ? `<span class="pcount">📷 ${it.photos.length}</span>` : "";
   const facts = [it.rooms?it.rooms+"к":"", it.area?it.area+" м²":"", it.floor?it.floor+(it.floors?"/"+it.floors:"")+" эт":""].filter(Boolean).join(" · ");
   const fav = `<button class="fav ${isFav(it.id)?'on':''}" data-fav="${it.id}" onclick="toggleFav(${it.id}, event)">${isFav(it.id)?'♥':'♡'}</button>`;

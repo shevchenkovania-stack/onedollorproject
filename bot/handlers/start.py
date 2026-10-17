@@ -36,6 +36,10 @@ if config.CHANNEL_URL:
 
 async def show_menu(target: Message, first_name: str | None = None) -> None:
     text = WELCOME if first_name else "Выбери, что нужно 👇"
+    if first_name and await db.count_demo_active():
+        # honest cold-start: the board is currently a styled showcase, not live supply
+        text += ("\n\n\U0001F9EA <i>Сейчас на доске — демо-объявления для витрины. "
+                 "Реальные однушки появятся здесь, как только хозяева начнут публиковаться.</i>")
     await target.answer(text, parse_mode="HTML", reply_markup=keyboards.main_menu())
 
 
@@ -124,8 +128,11 @@ async def cb_help(cb: CallbackQuery) -> None:
     await cb.answer()
     text = (
         "<b>Как это работает</b>\n\n"
-        "\U0001F50D <b>Поиск</b> — найти аренду или продажу.\n"
-        "\u2795 <b>Разместить объект</b> — добавить своё объявление (бесплатно).\n"
+        "\U0001F50D <b>Ищешь однушку</b> — «Поиск» или 📱 доска: фильтруй по району и цене, "
+        "на карточке жми «Показать контакт» — телефон хозяина сразу, без комиссии.\n"
+        "\U0001F514 <b>Не хочешь листать</b> — настрой фильтр и жми 🔔 «Следить»: "
+        "бот сам пришлёт новые однушки, когда они появятся.\n"
+        "\u2795 <b>Сдаёшь сам</b> — «Разместить объект»: бесплатно, пара минут.\n"
         "\U0001F4CB <b>Мои объявления</b> — управлять своими объектами и поднимать их.\n\n"
         "\U0001F680 <b>Boost</b> — платное поднятие объявления в топ выдачи.\n"
         f"Оплата: {keyboards.rails_line()}.\n\n"

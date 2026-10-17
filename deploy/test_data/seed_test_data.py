@@ -34,32 +34,60 @@ import db  # noqa: E402
 import publish  # noqa: E402
 
 
-# 10 pastel colors so placeholders don't look identical
-_PALETTE = ["#0f766e", "#1d4ed8", "#7c3aed", "#b45309", "#065f46",
-            "#9333ea", "#0284c7", "#dc2626", "#65a30d", "#f97316"]
+# 10 base hues so demo tiles look varied but cohesive (all sit in one brand family)
+_PALETTE = ["#0f766e", "#155e75", "#1d4ed8", "#4338ca", "#6d28d9",
+            "#7e22ce", "#0e7490", "#065f46", "#0f5132", "#1e3a8a"]
+
+
+def _shade(hex_color: str, factor: float) -> tuple:
+    """Darken/lighten a #rrggbb into an (r,g,b) tuple for the gradient stop."""
+    h = hex_color.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return tuple(max(0, min(255, int(c * factor))) for c in (r, g, b))
 
 
 def _placeholder(text: str, idx: int) -> bytes:
-    """A labeled 800x600 JPEG when the real photo is not present on the disk."""
-    color = _PALETTE[idx % len(_PALETTE)]
-    img = Image.new("RGB", (800, 600), color)
+    """A polished 800x600 demo tile (brand gradient + house line-art + district/price) used when
+    a real photo is not present. It reads as an intentional showcase card, never a broken image,
+    and is honest: it says ДЕМО. Cyrillic-safe via DejaVu; no emoji (the font has none)."""
+    W, H = 800, 600
+    top = _shade(_PALETTE[idx % len(_PALETTE)], 1.15)
+    bottom = _shade(_PALETTE[idx % len(_PALETTE)], 0.6)
+    img = Image.new("RGB", (W, H))
     d = ImageDraw.Draw(img)
+    for y in range(H):  # simple vertical gradient
+        t = y / (H - 1)
+        d.line((0, y, W, y), fill=tuple(int(top[c] + (bottom[c] - top[c]) * t) for c in range(3)))
     try:
-        f1 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 42)
-        f2 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
+        f1 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
+        f2 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 22)
+        f3 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
     except OSError:
-        f1 = f2 = ImageFont.load_default()
-    d.rectangle((24, 24, 776, 576), outline=(255, 255, 255), width=3)
-    title = text.split("\n")[0][:40]
-    sub = "\n".join(text.split("\n")[1:3])[:80]
+        f1 = f2 = f3 = ImageFont.load_default()
+    # house line-art, translucent white, upper-centre
+    line = (255, 255, 255, 210)
+    ox = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    od = ImageDraw.Draw(ox)
+    od.line((320, 250, 400, 185, 480, 250), fill=line, width=7, joint="curve")  # roof
+    od.rectangle((335, 250, 465, 345), outline=line, width=7)                    # body
+    od.rectangle((388, 300, 412, 345), outline=line, width=5)                    # door
+    img.paste(Image.alpha_composite(img.convert("RGBA"), ox).convert("RGB"))
+    d = ImageDraw.Draw(img)
+    d.rectangle((18, 18, W - 18, H - 18), outline=(255, 255, 255, 180), width=2)
+    # text: line 0 = "district · price", line 1 = small street note
+    parts = text.split("\n")
+    title = parts[0][:40]
+    sub = parts[1][:52] if len(parts) > 1 else ""
     bbox = d.textbbox((0, 0), title, font=f1)
-    d.text(((800 - bbox[2] + bbox[0]) / 2, 240), title, fill="white", font=f1)
-    for i, line in enumerate(sub.split("\n")):
-        bbox2 = d.textbbox((0, 0), line, font=f2)
-        d.text(((800 - bbox2[2] + bbox2[0]) / 2, 320 + i * 32), line, fill="white", font=f2)
-    d.text((30, 540), "Однушка.md · TEST DATA", fill=(255, 255, 255), font=f2)
+    d.text(((W - bbox[2] + bbox[0]) / 2, 392), title, fill="white", font=f1)
+    if sub:
+        bbox2 = d.textbbox((0, 0), sub, font=f2)
+        d.text(((W - bbox2[2] + bbox2[0]) / 2, 444), sub, fill=(255, 255, 255, 220), font=f2)
+    d.text((30, 30), "ДЕМО", fill="white", font=f2)
+    bbox3 = d.textbbox((0, 0), "Однушка.md", font=f3)
+    d.text((W - bbox3[2] + bbox3[0] - 30, H - 42), "Однушка.md", fill=(255, 255, 255, 200), font=f3)
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=85)
+    img.save(buf, format="JPEG", quality=88)
     return buf.getvalue()
 
 
@@ -111,6 +139,7 @@ async def _send_one(bot: Bot, admin_tg_id: int, db_user_id: int, item: dict,
         description=_compose_description(item),
         photos=file_ids,
         contacts=item.get("contacts") or {},
+        is_demo=int(item.get("is_demo", 1)),
     )
     await db.set_listing_status(lid, "active")
     row = await db.get_listing(lid)

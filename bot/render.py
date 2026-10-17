@@ -46,6 +46,15 @@ def _featured(row) -> bool:
     return bool(v and str(v) > _now_str())
 
 
+def _is_demo(row) -> bool:
+    """True for a seeded cold-start example (not a real owner's ad). Guarded so a card rendered
+    before the migration lands simply reads as a normal listing."""
+    try:
+        return bool(row["is_demo"])
+    except (IndexError, KeyError, TypeError):
+        return False
+
+
 def _now_str() -> str:
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -54,7 +63,8 @@ def listing_caption(row, show_status: bool = False, founding: int = 0) -> str:
     deal = DEAL_LABELS.get(row["deal"], row["deal"])
     ptype = PTYPE_LABELS.get(row["ptype"], row["ptype"])
     badge = "\U0001F525 <b>СРОЧНО</b> · " if _featured(row) else ""
-    lines = [f"<b>#{row['id']} · {badge}{deal} · {ptype}</b>"]
+    demo = "\U0001F9EA <b>ДЕМО</b> · " if _is_demo(row) else ""
+    lines = [f"<b>#{row['id']} · {demo}{badge}{deal} · {ptype}</b>"]
     parts = []
     if row["rooms"]:
         parts.append(f"{row['rooms']} комн.")
@@ -78,6 +88,9 @@ def listing_caption(row, show_status: bool = False, founding: int = 0) -> str:
         lines.append(f"\U0001F3C6 <b>Founding-участник #{founding}</b> · Однушка.md")
     lines.append("")
     lines.append(hashtags(row))
+    if _is_demo(row):
+        lines.append("")
+        lines.append("\U0001F9EA <i>Демо-объявление: пример для витрины, не реальная сдача.</i>")
     if show_status:
         lines.append("")
         lines.append(f"Статус: {STATUS_LABELS.get(row['status'], row['status'])}")
@@ -114,4 +127,5 @@ def listing_button_text(row) -> str:
     ptype = PTYPE_LABELS.get(row["ptype"], row["ptype"])[:4]
     rooms = f"{row['rooms']}к " if row["rooms"] else ""
     star = "\u2B50 " if row["boosted_until"] else ""
-    return f"{star}{deal} · {ptype} · {rooms}{row['district']} · {row['price']}{row['currency']}"
+    demo = "\U0001F9EA " if _is_demo(row) else ""
+    return f"{star}{demo}{deal} · {ptype} · {rooms}{row['district']} · {row['price']}{row['currency']}"

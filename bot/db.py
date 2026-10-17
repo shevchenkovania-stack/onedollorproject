@@ -40,7 +40,9 @@ CREATE TABLE IF NOT EXISTS listings (
     updated_at TEXT DEFAULT (datetime('now')),
     views INTEGER DEFAULT 0,
     -- Stage 4: when this active ad leaves the board on its own (set on approval)
-    expires_at TEXT
+    expires_at TEXT,
+    -- cold-start display board: a seeded example (1), not a real owner's ad (0)
+    is_demo INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_listings_status ON listings(status);
@@ -172,6 +174,9 @@ async def _migrate() -> None:
     if "expires_at" not in cols:
         # Stage 4: ads leave the board on their own date instead of living forever
         await _conn.execute("ALTER TABLE listings ADD COLUMN expires_at TEXT")
+    if "is_demo" not in cols:
+        # cold-start display board: a seeded example, not a real owner's ad (badge + honesty)
+        await _conn.execute("ALTER TABLE listings ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0")
     cur = await _conn.execute("PRAGMA table_info(payments)")
     cols = {r["name"] for r in await cur.fetchall()}
     if "amount" not in cols:
@@ -222,6 +227,8 @@ async def ensure_schema(conn: aiosqlite.Connection) -> None:
         await conn.execute("ALTER TABLE listings ADD COLUMN expires_at TEXT")
     if "featured_until" not in cols:
         await conn.execute("ALTER TABLE listings ADD COLUMN featured_until TEXT")
+    if "is_demo" not in cols:
+        await conn.execute("ALTER TABLE listings ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0")
     cur = await conn.execute("PRAGMA table_info(users)")
     ucols = {r["name"] for r in await cur.fetchall()}
     if "balance_mdl" not in ucols:
@@ -320,6 +327,14 @@ async def has_published_listing(user_id: int) -> bool:
         "SELECT 1 FROM listings WHERE user_id = ? AND status IN ('active','archived') LIMIT 1",
         (user_id,))
     return await cur.fetchone() is not None
+
+
+async def count_demo_active() -> int:
+    """Active seeded examples still on the board. The welcome copy shows an honest 'это демо'
+    note only while such cards exist, so it disappears automatically once real owners arrive."""
+    cur = await _db().execute(
+        "SELECT COUNT(*) c FROM listings WHERE status = 'active' AND is_demo = 1")
+    return (await cur.fetchone())["c"]
 
 
 # --- founding members: the first FOUNDING_SLOTS pack buyers, stamped for life --
@@ -454,14 +469,15 @@ async def create_listing(**kw: Any) -> int:
     cur = await db.execute(
         """INSERT INTO listings
            (user_id, deal, ptype, rooms, price, currency, district, area,
-            floor, floors, phone, description, photos, contacts, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
+            floor, floors, phone, description, photos, contacts, status, is_demo)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)""",
         (
             kw["user_id"], kw["deal"], kw["ptype"], kw.get("rooms"), kw["price"],
             kw.get("currency", "EUR"), kw.get("district"), kw.get("area"),
             kw.get("floor"), kw.get("floors"), kw.get("phone"),
             kw.get("description"), json.dumps(kw.get("photos", [])),
             json.dumps(kw.get("contacts") or {}, ensure_ascii=False),
+            int(kw.get("is_demo", 0)),
         ),
     )
     await db.commit()
