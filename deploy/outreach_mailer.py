@@ -90,15 +90,10 @@ SUBJECT = {
 # company is deleted as a company.
 BODY_RU = """{greeting}
 
-Я не агентство и не брокер — сам делаю доску объявлений по однушкам в Кишинёве (Telegram).
-Сейчас её наполняю, поэтому мне нужны объекты.
+Делаю доску однушек Кишинёва в Telegram — сейчас её наполняю, нужны объекты.
 
-Польза для вас простая: выкладываю ваши объекты аренды бесплатно, с вашими фото и вашим
-телефоном, и доску раскручиваю — то есть часть тех, кто ищет однушку, приходит к вам. Работы
-вам это не добавляет, и нечем рисковать: скажете «убери» — убираю.
-
-{note}Как удобнее: пришлите сами (фото + район + цена) или разрешите взять то, что уже опубликовано
-у вас на сайте, — перенесу аккуратно, со ссылкой на вас.
+{note}Не хотите, чтобы я бесплатно разместил ваши объекты аренды у нас? Фото, описание и телефон —
+ваши, комиссию не беру. Скажете «убрать» — убираю.
 
 Если неинтересно — ответьте одно «нет», и по этому адресу больше не напишу.
 
@@ -108,15 +103,10 @@ BODY_RU = """{greeting}
 
 BODY_RO = """{greeting}
 
-Nu sunt agenție și nu sunt broker — fac singur un tablou de anunțuri cu garsoniere în Chișinău
-(Telegram). Acum îl umplu cu oferte, de aceea am nevoie de listări.
+Fac un tablou de garsoniere în Chișinău (Telegram) — acum îl umplu, am nevoie de oferte.
 
-Câștigul pentru dvs. e simplu: public gratuit listările dvs. de chirie — cu pozele și telefonul
-dumneavoastră — și fac tabloul cunoscut, deci o parte dintre cei care caută o garsonieră ajung la
-dvs. Fără muncă în plus pentru dumneavoastră și fără risc: spuneți „șterge” și șterg.
-
-{note}Cum vă e mai comod: trimiteți-mi dvs. (poză + sector + preț) sau dați voie să iau ce aveți
-deja publicat pe site — le mut cu grijă, cu link către site-ul dvs.
+{note}Nu doriți să vă public gratuit listările de chirie la mine? Pozele, textul și telefonul rămân
+ale dumneavoastră, fără comision. Spuneți „șterge” și șterg.
 
 Dacă nu e de interes, răspundeți doar cu «nu» — nu mai scriu la această adresă.
 
