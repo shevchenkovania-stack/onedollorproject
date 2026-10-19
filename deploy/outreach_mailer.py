@@ -81,24 +81,21 @@ def cfg() -> dict:
 
 
 SUBJECT = {
-    "ru": "Бесплатно выложу ваши объекты аренды на доску однушек Кишинёва",
-    "ro": "Public gratuit pe tabloul de garsoniere din Chișinău — listările dvs. de chirie",
+    "ru": "Ваши объекты аренды на доску однушек Кишинёва — бесплатно",
+    "ro": "Listările dvs. de chirie pe tabloul de garsoniere din Chișinău — gratuit",
 }
 
+# Written in the founder's own register on purpose: no marketing words, no "мы уникальные тем, что".
+# A cold email that sounds like a brochure is read as one.
 BODY_RU = """{greeting}
 
-Пишу по делу и коротко. Мы делаем Однушка.md — доску однушек и квартир Кишинёва в Telegram.
-Не посредники: комиссию не берём ни с собственника, ни с арендатора, телефон на карточке — ваш.
+Мы скоро запускаем доску объявлений по однушкам и квартирам в Кишинёве (Telegram).
 
-Предложение: давайте я бесплатно выложу ваши текущие объекты аренды к себе на доску. От вас
-нужен только список (или разрешение взять фото и описания из того, что уже опубликовано) —
-оформление, модерацию и продление беру на себя, работы вам это не добавляет. В каждой карточке
-остаётся ссылка на ваш канал/сайт, то есть это вторая площадка, а не замена вашей.
+Не могли бы вы предоставить нам свои объекты по аренде? Мы сами всё выложим — с вашими фото,
+вашим описанием и вашим телефоном. Комиссию за это не берём ни с вас, ни с клиента: вам просто
+будут звонить. Получается ещё одно место, где вас видят, а не замена вашего сайта.
 
-Чем мы отличаемся от ленты в Telegram: поиск по фильтрам (район / комнаты / цена), и объявление
-само истекает — доска не превращается в кладбище протухших объектов.
-
-{note}Если неактуально — ответьте одно «нет», по этому адресу больше не напишу.
+{note}Если неинтересно — ответьте одно «нет», и по этому адресу больше не напишу.
 
 {bot_url}
 
@@ -106,17 +103,11 @@ BODY_RU = """{greeting}
 
 BODY_RO = """{greeting}
 
-Scurt și la obiect. Facem Однушка.md — un tablou gratuit de anunțuri cu garsoniere și apartamente
-în Chișinău, direct în Telegram. Nu suntem intermediari: zero comision, iar telefonul de pe fișă
-rămâne al dumneavoastră.
+Lansăm în curând un tablou de anunțuri cu garsoniere și apartamente în Chișinău (Telegram).
 
-Propunerea: haideți să public gratuit pe tabloul nostru listările dvs. actuale de chirie. Avem
-nevoie doar de listă (sau de acordul să preiau pozele și descrierile din ce aveți deja publicat) —
-formatarea, moderarea și reînnoirea le fac eu, fără încă o sarcină pentru voi. Pe fiecare fișă
-rămâne link către canalul/site-ul dvs., deci e o a doua platformă, nu o înlocuire.
-
-Ce ne diferențiază de un feed Telegram: căutarea cu filtre (sector / camere / preț), iar anunțul
-expiră singur — tabloul nu ajunge o groapă de oferte vechi.
+Ne-ați putea trimite listările dvs. de chirie? Le publicăm noi — cu pozele, textul și telefonul
+dumneavoastră. Nu luăm comision nici de la dumneavoastră, nici de la client: clienții vă sună
+direct. E încă un loc unde vă văd, nu un înlocuitor pentru site-ul dvs.
 
 {note}Dacă nu e de interes, răspundeți doar cu «nu» — nu mai scriu la această adresă.
 
