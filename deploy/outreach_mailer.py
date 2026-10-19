@@ -81,21 +81,26 @@ def cfg() -> dict:
 
 
 SUBJECT = {
-    "ru": "Ваши объекты аренды на доску однушек Кишинёва — бесплатно",
-    "ro": "Listările dvs. de chirie pe tabloul de garsoniere din Chișinău — gratuit",
+    "ru": "Объекты аренды на мою доску однушек — бесплатно",
+    "ro": "Listările dvs. pe tabloul meu de garsoniere — gratuit",
 }
 
-# Written in the founder's own register on purpose: no marketing words, no "мы уникальные тем, что".
-# A cold email that sounds like a brochure is read as one.
+# The founder's own words, on purpose: one person, a new board, he needs objects and is honest about
+# what the recipient gets. No "мы запускаем", no brochure adjectives - a cold mail that sounds like a
+# company is deleted as a company.
 BODY_RU = """{greeting}
 
-Мы скоро запускаем доску объявлений по однушкам и квартирам в Кишинёве (Telegram).
+Я не агентство и не брокер — сам делаю доску объявлений по однушкам в Кишинёве (Telegram).
+Сейчас её наполняю, поэтому мне нужны объекты.
 
-Не могли бы вы предоставить нам свои объекты по аренде? Мы сами всё выложим — с вашими фото,
-вашим описанием и вашим телефоном. Комиссию за это не берём ни с вас, ни с клиента: вам просто
-будут звонить. Получается ещё одно место, где вас видят, а не замена вашего сайта.
+Польза для вас простая: выкладываю ваши объекты аренды бесплатно, с вашими фото и вашим
+телефоном, и доску раскручиваю — то есть часть тех, кто ищет однушку, приходит к вам. Работы
+вам это не добавляет, и нечем рисковать: скажете «убери» — убираю.
 
-{note}Если неинтересно — ответьте одно «нет», и по этому адресу больше не напишу.
+{note}Как удобнее: пришлите сами (фото + район + цена) или разрешите взять то, что уже опубликовано
+у вас на сайте, — перенесу аккуратно, со ссылкой на вас.
+
+Если неинтересно — ответьте одно «нет», и по этому адресу больше не напишу.
 
 {bot_url}
 
@@ -103,13 +108,17 @@ BODY_RU = """{greeting}
 
 BODY_RO = """{greeting}
 
-Lansăm în curând un tablou de anunțuri cu garsoniere și apartamente în Chișinău (Telegram).
+Nu sunt agenție și nu sunt broker — fac singur un tablou de anunțuri cu garsoniere în Chișinău
+(Telegram). Acum îl umplu cu oferte, de aceea am nevoie de listări.
 
-Ne-ați putea trimite listările dvs. de chirie? Le publicăm noi — cu pozele, textul și telefonul
-dumneavoastră. Nu luăm comision nici de la dumneavoastră, nici de la client: clienții vă sună
-direct. E încă un loc unde vă văd, nu un înlocuitor pentru site-ul dvs.
+Câștigul pentru dvs. e simplu: public gratuit listările dvs. de chirie — cu pozele și telefonul
+dumneavoastră — și fac tabloul cunoscut, deci o parte dintre cei care caută o garsonieră ajung la
+dvs. Fără muncă în plus pentru dumneavoastră și fără risc: spuneți „șterge” și șterg.
 
-{note}Dacă nu e de interes, răspundeți doar cu «nu» — nu mai scriu la această adresă.
+{note}Cum vă e mai comod: trimiteți-mi dvs. (poză + sector + preț) sau dați voie să iau ce aveți
+deja publicat pe site — le mut cu grijă, cu link către site-ul dvs.
+
+Dacă nu e de interes, răspundeți doar cu «nu» — nu mai scriu la această adresă.
 
 {bot_url}
 
@@ -132,7 +141,7 @@ def render(rec: dict, c: dict) -> tuple[str, str]:
     greeting = g["with_name"].format(name=name) if name else g["plain"]
     note = (rec.get("note") or "").strip()
     note = f"{note}\n\n" if note else ""
-    sig = c["contact"] or "Однушка.md · Telegram-доска однушек Кишинёва"
+    sig = c["contact"] or "Иван · Однушка.md"
     body = (BODY_RU if lang == "ru" else BODY_RO).format(
         greeting=greeting, note=note, bot_url=c["bot_url"], sig=sig)
     return SUBJECT[lang], body.rstrip() + "\n"
