@@ -76,7 +76,9 @@ PITCH = {
     ),
 }
 
-HI = ["Здравствуйте", "Добрый день", "Здравствуйте, пишу по делу", "Добрый день, коротко по делу"]
+# Two openings only: they have to read naturally with a name inserted ("Добрый день, коротко по
+# делу, Наталья!" is what a longer list produces, and a garbled greeting is a spam tell).
+HI = ["Здравствуйте", "Добрый день"]
 
 FOLLOW_UP = (
     "{hi}\n"
@@ -162,7 +164,9 @@ def find_contact(key: str, contacts: list[dict]) -> dict | None:
     return None
 
 
-def show(rec: dict, follow: bool = False) -> None:
+def show(rec: dict, follow: bool = False, copy: bool = True) -> str:
+    """Print one ready message. `copy` is only true for the message you are about to send: a batch
+    of three would otherwise leave the LAST text in the clipboard while you are sending the first."""
     text = build(rec, follow)
     print("=" * 68)
     print(f"Кому: {rec['chat']}  ·  {rec.get('org', '')}  ·  тип: {rec.get('kind', '')}")
@@ -170,8 +174,10 @@ def show(rec: dict, follow: bool = False) -> None:
     print("-" * 68)
     print(text)
     print("-" * 68)
-    print(copy_to_clipboard(text))
+    if copy:
+        print(copy_to_clipboard(text))
     print(f"Как отправили:  python outreach_tg.py sent {rec['chat']}")
+    return text
 
 
 def main() -> None:
@@ -232,8 +238,8 @@ def main() -> None:
         if not todo:
             print(f"фоллоу-апа пока нет (окно {FOLLOW_UP_HOURS} ч ещё не прошло ни по одному адресу)")
             return
-        for rec in todo[: MAX_BATCH]:
-            show(rec, follow=True)
+        for i, rec in enumerate(todo[: MAX_BATCH]):
+            show(rec, follow=True, copy=i == 0)
         print(f"всего ждут фоллоу-апа: {len(todo)}")
         return
 
@@ -246,10 +252,14 @@ def main() -> None:
         print("очередь пуста — все контакты записаны")
         return
     n = min(int(args.arg1 or 1), MAX_BATCH, left, len(queue))
-    for rec in queue[:n]:
-        show(rec)
+    batch = queue[:n]
+    for i, rec in enumerate(batch):
+        show(rec, copy=i == 0)
     print("=" * 68)
-    print(f"показал {n} · осталось в очереди {len(queue) - n} · сегодня ещё можно {left - n}")
+    print(f"показал {len(batch)} · В БУФЕРЕ ТЕКСТ ПЕРВОГО · осталось в очереди {len(queue) - len(batch)}"
+          f" · сегодня ещё можно {left - len(batch)}")
+    print("Открыли ссылку → Ctrl+V → отправили → python outreach_tg.py sent <имя>. "
+          "Следующее сообщение - только после паузы, не подряд.")
     print("Пауза между отправками 3-5 минут. 2-3 новых чата за заход — наш же лимит, не больше.")
 
 
