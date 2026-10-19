@@ -186,15 +186,19 @@ def record(rec: dict, lang: str, msg_id: str, status: str, error: str = "") -> N
         fh.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-def build_message(rec: dict, c: dict) -> EmailMessage:
+def build_message(rec: dict, c: dict, to: str | None = None) -> EmailMessage:
+    """`to` overrides the recipient in test mode. It has to be decided here, not by reassigning
+    msg["To"] afterwards: EmailMessage refuses a second To header outright (checked)."""
     subject, body = render(rec, c)
+    if to:
+        subject = f"[TEST → {rec['email']}] {subject}"
     msg = EmailMessage()
     msg["Subject"] = subject
     # A non-ASCII display name must go through Address, not formataddr: assigning the plain string
     # makes the header serializer raise UnicodeEncodeError at the first Cyrillic name (checked).
     domain = c["user"].partition("@")[2]
     msg["From"] = Address(display_name=c["from_name"], addr_spec=c["user"])
-    msg["To"] = rec["email"].strip()
+    msg["To"] = (to or rec["email"]).strip()
     if c["reply_to"] and c["reply_to"].lower() != c["user"].lower():
         # answers must land in a human's inbox, or the outreach converts into nothing
         msg["Reply-To"] = c["reply_to"]
@@ -215,10 +219,7 @@ def send(recs: list[dict], c: dict, test_to: str | None = None) -> int:
             s.starttls(context=ssl.create_default_context())
         s.login(c["user"], c["password"])
         for i, rec in enumerate(recs):
-            msg = build_message(rec, c)
-            if test_to:
-                msg["To"] = test_to
-                msg["Subject"] = f"[TEST → {rec['email']}] {msg['Subject']}"
+            msg = build_message(rec, c, to=test_to)
             try:
                 s.send_message(msg)
             except Exception as e:  # a refused address must not stop the whole batch
@@ -231,7 +232,8 @@ def send(recs: list[dict], c: dict, test_to: str | None = None) -> int:
             print(f"  {tag} {i + 1}/{len(recs)} → {rec['email']} ({rec.get('org', '')})")
             if not test_to:
                 record(rec, rec.get("lang", "ru"), msg["Message-ID"], "sent")
-            if i + 1 < len(recs):
+            if not test_to and i + 1 < len(recs):
+                # the jitter is anti-bot camouflage for real recipients; a self-test waits for nothing
                 time.sleep(random.uniform(*DEFAULT_DELAY))
     return done
 
