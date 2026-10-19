@@ -158,12 +158,17 @@ def read_ledger() -> list[dict]:
 
 
 def written_emails() -> set[str]:
-    return {str(e.get("email", "")).lower() for e in read_ledger()}
+    """Addresses the queue must not touch again. A "deferred" row is a transport accident, not a
+    contact we have written to, so that address rejoins the queue on the next run."""
+    return {str(e.get("email", "")).lower() for e in read_ledger()
+            if e.get("status") in ("sent", "failed")}
 
 
 def sent_today() -> int:
+    """Only real sends burn the daily cap - a session that died mid-batch must not eat the day."""
     day = time.strftime("%Y-%m-%d")
-    return sum(1 for e in read_ledger() if str(e.get("sent_at", "")).startswith(day))
+    return sum(1 for e in read_ledger()
+               if e.get("status") == "sent" and str(e.get("sent_at", "")).startswith(day))
 
 
 def record(rec: dict, lang: str, msg_id: str, status: str, error: str = "") -> None:
@@ -199,32 +204,82 @@ def build_message(rec: dict, c: dict, to: str | None = None) -> EmailMessage:
     return msg
 
 
+RECONNECT_AFTER = 5  # Gmail drops a long SMTP session: the first run lost 13 addresses at one second
+
+
+def open_session(c: dict):
+    """A fresh, logged-in session. Long ones are killed by Gmail, so the batch re-logins every few
+    messages instead of discovering a dead socket in the middle of the list."""
+    if c["ssl"]:
+        s = smtplib.SMTP_SSL(c["host"], c["port"], context=ssl.create_default_context())
+    else:
+        s = smtplib.SMTP(c["host"], c["port"])
+        s.starttls(context=ssl.create_default_context())
+    s.login(c["user"], c["password"])
+    return s
+
+
+def close_session(s) -> None:
+    if s is None:
+        return
+    try:
+        s.quit()
+    except Exception:
+        try:
+            s.close()
+        except Exception:
+            pass
+
+
 def send(recs: list[dict], c: dict, test_to: str | None = None) -> int:
     if not (c["user"] and c["password"]):
         sys.exit("SMTP_USER / SMTP_PASS are empty — fill deploy/outreach.env (see outreach.env.example)")
     done = 0
-    with smtplib.SMTP_SSL(c["host"], c["port"], context=ssl.create_default_context()) \
-            if c["ssl"] else smtplib.SMTP(c["host"], c["port"]) as s:
-        if not c["ssl"]:
-            s.starttls(context=ssl.create_default_context())
-        s.login(c["user"], c["password"])
-        for i, rec in enumerate(recs):
-            msg = build_message(rec, c, to=test_to)
+    s = None
+    since_login = 0
+    for i, rec in enumerate(recs):
+        msg = build_message(rec, c, to=test_to)
+        outcome = None  # None = sent; otherwise ("permanent"|"transport", error)
+        for attempt in (1, 2):
             try:
+                if s is None or since_login >= RECONNECT_AFTER:
+                    close_session(s)
+                    s = open_session(c)
+                    since_login = 0
                 s.send_message(msg)
-            except Exception as e:  # a refused address must not stop the whole batch
-                print(f"  FAIL {rec['email']}: {e}")
-                if not test_to:
-                    record(rec, rec.get("lang", "ru"), "", "failed", str(e)[:180])
-                continue
+                outcome = None
+                break
+            except smtplib.SMTPResponseException as e:
+                # the server answered about this address: a real rejection, do not retry it forever
+                outcome = ("permanent", f"{e.smtp_code} {e.smtp_error!r}")
+                close_session(s)
+                s, since_login = None, 0
+                break
+            except Exception as e:
+                outcome = ("transport", str(e))
+                close_session(s)
+                s, since_login = None, 0
+                if attempt == 1:
+                    print(f"  сессия упала ({str(e)[:60]}) - переподключаюсь и повторяю {rec['email']}")
+                    time.sleep(20)
+                    continue
+        if outcome is None:
             done += 1
+            since_login += 1
             tag = "test" if test_to else "sent"
             print(f"  {tag} {i + 1}/{len(recs)} → {rec['email']} ({rec.get('org', '')})")
             if not test_to:
                 record(rec, rec.get("lang", "ru"), msg["Message-ID"], "sent")
-            if not test_to and i + 1 < len(recs):
-                # the jitter is anti-bot camouflage for real recipients; a self-test waits for nothing
-                time.sleep(random.uniform(*DEFAULT_DELAY))
+                if i + 1 < len(recs):
+                    # the jitter is anti-bot camouflage for real recipients; a self-test waits nothing
+                    time.sleep(random.uniform(*DEFAULT_DELAY))
+        else:
+            kind, err = outcome
+            print(f"  {'FAIL' if kind == 'permanent' else 'SKIP'} {rec['email']}: {err[:120]}")
+            if not test_to:
+                record(rec, rec.get("lang", "ru"), "",
+                       "failed" if kind == "permanent" else "deferred", err[:180])
+    close_session(s)
     return done
 
 
@@ -251,7 +306,9 @@ def main() -> None:
     if args.status:
         rows = read_ledger()
         ok = [r for r in rows if r.get("status") == "sent"]
-        print(f"contacts {len(contacts)} · written {len(ok)} · failed {len(rows) - len(ok)} · "
+        bad = [r for r in rows if r.get("status") == "failed"]
+        late = [r for r in rows if r.get("status") == "deferred"]
+        print(f"contacts {len(contacts)} · sent {len(ok)} · failed {len(bad)} · deferred {len(late)} · "
               f"queued {len(queue)} · today {sent_today()} · cap/day {cap}")
         for r in rows[-10:]:
             print(f"  {r.get('sent_at')}  {r.get('status'):7}  {r.get('email'):32} {r.get('org', '')}")
