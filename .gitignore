@@ -2,6 +2,8 @@
 ACCESS.md
 *.vps
 .vps.env
+deploy/outreach.env
+deploy/outreach_ledger.jsonl
 
 # python
 __pycache__/
