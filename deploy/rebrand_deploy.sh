@@ -14,8 +14,8 @@ sleep 4
 printf 'bot='; systemctl is-active imobiliare
 printf 'web='; systemctl is-active imobiliare-web
 
-echo "== re-identity bot (rename.py) =="
-/opt/imobiliare/venv/bin/python rename.py
+echo "== re-identity bot + channel (seo_seeds.py owns every indexed name/description) =="
+/opt/imobiliare/venv/bin/python /tmp/seo_seeds.py
 
 echo "== Mini App title served =="
 curl -s http://127.0.0.1:8085/ | grep -o '<title>[^<]*</title>' | head -1

@@ -18,7 +18,7 @@ What it does:
 
 Run on prod:  cd /opt/imobiliare/bot && /opt/imobiliare/venv/bin/python /tmp/seo_seeds.py
 Register a channel the human created (either its -100 id or its public handle):
-  ... seo_seeds.py s1=@odnushki_md  |  ... seo_seeds.py s1=-1002345678901
+  ... seo_seeds.py rent=@chirie_kvartire_md  |  ... seo_seeds.py ro=-1002345678901
 """
 import asyncio
 import json
@@ -54,29 +54,26 @@ BOT_LONG = (
 )
 
 # One entry = one search cluster the family should own. Title <=60, description <=255 chars.
+# "wire": "channel" means the surface is ALREADY public and wired in .env (CHANNEL_ID) - no
+# manual step for it. "welcome": None means identity only (pin_roles.py owns that channel's pinned
+# navigation post, so we do not fight over the pin).
 CLUSTERS = [
     {
-        "key": "s1",
+        "key": "board",
         "lang": "ru",
+        "wire": "channel",
         "title": "Однушки в Кишинёве · Аренда без комиссии",
         "desc": (
             "Снять однушку в Кишинёве напрямую у хозяина, без комиссии и посредников. "
             "Аренда однушки: Botanica, Râșcani, Centru, Budva, Buiucani. "
             "Подать объявление бесплатно: "
         ),
-        "welcome": (
-            "🏠 <b>Однушки в Кишинёве — аренда без комиссии</b>\n\n"
-            "Здесь появляются новые однушки от хозяев: район, цена, прямой контакт на карточке. "
-            "Жми кнопку — откроешь поиск в боте.\n\n"
-            "• Ищешь: фильтр по району и цене за 10 секунд\n"
-            "• Сдаёшь: разместить однушку бесплатно, за 2 минуты\n"
-            "• Не листать: напиши боту район и бюджет — подберём и следим за новыми"
-        ),
+        "welcome": None,
         "cta": "🔍 Смотреть однушки",
-        "handle": "@odnushki_md",
+        "handle": "@gaseste_casa (уже публичный)",
     },
     {
-        "key": "s2",
+        "key": "rent",
         "lang": "ru",
         "title": "Снять Квартиру в Кишинёве · Без Посредников",
         "desc": (
@@ -95,7 +92,7 @@ CLUSTERS = [
         "handle": "@chirie_kvartire_md",
     },
     {
-        "key": "s3",
+        "key": "ro",
         "lang": "ro",
         "title": "Chirie 1 Cameră Chișinău · Garsonieră Direct Proprietar",
         "desc": (
@@ -114,7 +111,7 @@ CLUSTERS = [
         "handle": "@chirie_1camera_chisinau",
     },
     {
-        "key": "s4",
+        "key": "sector",
         "lang": "ro",
         "title": "Chirie Botanica · Râșcani · Buiucani pe Sector",
         "desc": (
@@ -166,10 +163,11 @@ async def main() -> None:
     bot = Bot(config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
     # 0. register channels passed on the command line (key=@publichandle or key=-100...)
+    keys = {c["key"] for c in CLUSTERS}
     for arg in sys.argv[1:]:
         key, _, ref = arg.partition("=")
-        if key not in {c["key"] for c in CLUSTERS}:
-            raise SystemExit(f"unknown cluster key: {key} (use s1..s4)")
+        if key not in keys:
+            raise SystemExit(f"unknown cluster key: {key} (use {'/'.join(sorted(keys))})")
         ref = ref.strip()
         if ref.startswith("-") or ref.isdigit():
             chat_id = int(ref) if ref.startswith("-") else int("-100" + ref)
@@ -188,23 +186,32 @@ async def main() -> None:
     _, err = await _silent(bot.set_my_description(BOT_LONG))
     print("bot long:", "ok" if err is None else err)
 
-    # 2. satellite channels the human created and gave us admin rights to
+    # 2. channel surfaces: the wired one from .env, the rest once a human creates them
     me = await bot.get_me()
     deep = f"https://t.me/{me.username}?start="
     wired, missing = [], []
 
     for c in CLUSTERS:
-        entry = state.get(c["key"]) or {}
-        cid = entry.get("chat_id")
-        if not cid:
-            missing.append(c)
-            continue
+        if c.get("wire") == "channel":
+            cid, entry = config.CHANNEL_ID, {}
+            if not cid:
+                print(f"{c['key']}: CHANNEL_ID not set - channel is hidden, skipped")
+                continue
+        else:
+            entry = state.get(c["key"]) or {}
+            cid = entry.get("chat_id")
+            if not cid:
+                missing.append(c)
+                continue
         wired.append(c["key"])
 
         _, err = await _silent(bot.set_chat_title(cid, c["title"]))
         print(f"{c['key']} title:", "ok" if err is None else err)
         _, err = await _silent(bot.set_chat_description(cid, c["desc"] + config.BOT_URL))
         print(f"{c['key']} desc:", "ok" if err is None else err)
+        if c["welcome"] is None:
+            # identity only - pin_roles.py owns this channel's pinned navigation post
+            continue
 
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=c["cta"], url=deep + "seo_" + c["key"])],

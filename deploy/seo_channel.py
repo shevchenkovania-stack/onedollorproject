@@ -1,13 +1,12 @@
-"""Storefront for Telegram search: titles, descriptions and the posts that make an empty
-channel look alive.
+"""Channel storefront posts: the three cards that make an empty channel look alive.
 
-Idempotent - safe to re-run after every copy change:
-  1. channel title + description (this is what Telegram search indexes for the channel);
-  2. bot short + long description (indexed for the bot - it used to advertise Stars as the
-     payment, while the real rail is a 100 MDL MIA transfer);
-  3. three "how it works" posts. Message ids are remembered in
-     /opt/imobiliare/data/channel_series.json, so a re-run EDITS them in place instead of
-     spamming the feed. If Telegram refuses the edit (old message), a fresh one is posted.
+Idempotent: message ids are remembered in /opt/imobiliare/data/channel_series.json, so a re-run
+EDITS them in place instead of spamming the feed. If Telegram refuses the edit (old message), a
+fresh one is posted.
+
+Titles and descriptions are NOT this file's job - `seo_seeds.py` is the single source for every
+indexed name/description (bot + channels). Keeping them here used to silently revert the SEO core
+on the next run of the other tool.
 
 Run: cd /opt/imobiliare/bot && /opt/imobiliare/venv/bin/python /tmp/seo_channel.py
 """
@@ -27,20 +26,7 @@ import config
 
 STATE = "/opt/imobiliare/data/channel_series.json"
 
-TITLE = "Однушка.md · Аренда и продажа Кишинёва"
-
-SHORT = "Аренда и продажа жилья в Кишинёве: поиск и объявления без комиссии."
-
-LONG = (
-    "«Однушка.md» — объявления об аренде и продаже недвижимости в Кишинёве и пригородах.\n\n"
-    "• Поиск по сделке, типу, комнатам, району и цене\n"
-    "• Подать объявление — бесплатно, за 2 минуты\n"
-    "• Контакт владельца напрямую, без комиссии и посредников\n"
-    "• Поднять в топ (Boost) — 100 MDL переводом MIA или 400 Stars\n\n"
-    "Свежие объекты выходят в канал: @gaseste_casa"
-)
-
-TAGS = "#аренда #продажа #кишинёв #chirie #безкомиссии"
+TAGS = "#аренда #однушки #кишинёв #chirie #безкомиссии"
 
 
 def _btns(*rows: list[InlineKeyboardButton]) -> InlineKeyboardMarkup:
@@ -111,16 +97,9 @@ async def _silent(coro):
 
 
 async def main() -> None:
+    if not config.CHANNEL_ID:
+        raise SystemExit("CHANNEL_ID not set - the channel is hidden, nothing to post")
     bot = Bot(config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-
-    _, err = await _silent(bot.set_chat_title(config.CHANNEL_ID, TITLE))
-    print("title:", "ok" if err is None else err)
-    _, err = await _silent(bot.set_chat_description(config.CHANNEL_ID, config_description()))
-    print("channel description:", "ok" if err is None else err)
-    _, err = await _silent(bot.set_my_short_description(SHORT))
-    print("bot short:", "ok" if err is None else err)
-    _, err = await _silent(bot.set_my_description(LONG))
-    print("bot description:", "ok" if err is None else err)
 
     state: dict = {}
     if os.path.exists(STATE):
@@ -151,18 +130,6 @@ async def main() -> None:
         json.dump(state, f, ensure_ascii=False, indent=2)
     print("state:", state)
     await bot.session.close()
-
-
-def config_description() -> str:
-    # Telegram caps a channel description at 255 characters: keywords first, link last.
-    text = (
-        "Аренда и продажа квартир и домов в Кишинёве и пригородах — без комиссии и без платы "
-        "за объявление. Chirie Chișinău · контакт владельца на каждой карточке. "
-        "#аренда #продажа #кишинёв #chirie\nПодать объявление: " + config.BOT_URL
-    )
-    if len(text) > 255:
-        raise SystemExit(f"description too long: {len(text)} > 255")
-    return text
 
 
 asyncio.run(main())

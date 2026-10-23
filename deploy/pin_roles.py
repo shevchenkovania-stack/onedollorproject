@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """First-glance clarity for the channel, the standard way: a short 'what is this / what to do'
-pinned post with tappable buttons, plus a channel description.
+pinned post with tappable buttons.
 
 Idempotent: if a post is already pinned, it is EDITED in place (no duplicate clutter); only when
 nothing is pinned does it send a fresh one and pin it. Safe to re-run whenever the text changes.
+
+The channel NAME and DESCRIPTION are owned by seo_seeds.py (single source for everything the
+Telegram search indexes) - this file only writes the pinned navigation post.
 
 Run on prod from /opt/imobiliare/bot:  /opt/imobiliare/venv/bin/python pin_roles.py
 """
@@ -14,26 +17,21 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 import config
 
-DESCRIPTION = (
-    "Аренда и продажа квартир и домов в Кишинёве и пригородах — без комиссии и без платы "
-    "за объявление. Chirie Chișinău · контакт владельца на каждой карточке. "
-    "#аренда #продажа #кишинёв #chirie\nПодать объявление: "
-) + config.BOT_URL
-
 # intent first, two lines, then buttons - a newcomer maps 'I'm looking' vs 'I'm posting' at a glance
 PINNED = (
-    "\U0001F4CD <b>Găsește Casa</b> — здесь выходит каждый новый объект: квартиры и дома "
-    "в Кишинёве, аренда и продажа.\n\n"
-    "\U0001F50D Ты <b>ищешь</b> → открыл карточку, контакт прямо на ней — договариваешься напрямую.\n"
-    "\u2795 Ты <b>сдаёшь / продаёшь</b> → подай объявление в боте. Бесплатно, 2 минуты.\n\n"
+    "\U0001F4CD <b>Однушки в Кишинёве</b> — здесь выходит каждая новая однушка от хозяина: "
+    "район, цена, контакт на карточке.\n\n"
+    "\U0001F50D Ты <b>ищешь</b> → открыл карточку, связываешься напрямую.\n"
+    "\u2795 Ты <b>сдаёшь</b> → подай объявление в боте. Бесплатно, 2 минуты.\n\n"
     "Комиссии нет ни с кого. Жми кнопку \U0001F447\n\n"
-    "#аренда #продажа #кишинёв #chirie #безкомиссии"
+    "#аренда #однушки #кишинёв #chirie #безкомиссии"
 )
 
 
 def _buttons() -> InlineKeyboardMarkup:
     rows = [[
-        InlineKeyboardButton(text="\U0001F50D Искать жильё", url=config.BOT_URL),
+        # the channel is a search surface: its button carries a tracked deep link
+        InlineKeyboardButton(text="\U0001F50D Искать жильё", url=f"{config.BOT_URL}?start=seo_board"),
         InlineKeyboardButton(text="\u2795 Подать объявление", url=f"{config.BOT_URL}?start=add"),
     ]]
     if config.WEBAPP_URL:
@@ -44,14 +42,9 @@ def _buttons() -> InlineKeyboardMarkup:
 async def main() -> None:
     from aiogram import Bot
     from aiogram.exceptions import TelegramBadRequest
+    if not config.CHANNEL_ID:
+        raise SystemExit("CHANNEL_ID not set - the channel is hidden, nothing to pin")
     bot = Bot(token=config.BOT_TOKEN)
-    try:
-        await bot.set_chat_description(config.CHANNEL_ID, description=DESCRIPTION[:255])
-    except TelegramBadRequest as e:
-        # Telegram errors when the text is already identical - harmless on re-run
-        if "not modified" not in str(e):
-            raise
-
     chat = await bot.get_chat(config.CHANNEL_ID)
     pm = getattr(chat, "pinned_message", None)
     if pm is not None:
