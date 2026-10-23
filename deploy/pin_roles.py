@@ -13,17 +13,24 @@ Run on prod from /opt/imobiliare/bot:  /opt/imobiliare/venv/bin/python pin_roles
 import asyncio
 import sys
 
+# pin the app dir first: /tmp has a stale config.py with CHANNEL_ID commented out, and a
+# `/python /tmp/pin_roles.py` run would import THAT and think the channel is hidden.
+sys.path.insert(0, "/opt/imobiliare/bot")
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 import config
 
-# intent first, two lines, then buttons - a newcomer maps 'I'm looking' vs 'I'm posting' at a glance
+# intent first, the launch offer up top, then buttons - a newcomer sees "new board, it's free,
+# add yours" in one glance (re-run edits the pinned post in place, no duplicate clutter)
 PINNED = (
-    "\U0001F4CD <b>Однушки в Кишинёве</b> — здесь выходит каждая новая однушка от хозяина: "
-    "район, цена, контакт на карточке.\n\n"
+    "\U0001F680 <b>Новая доска однушек в Кишинёве</b> — каждая однушка от хозяина, "
+    "без посредников и без комиссии.\n\n"
+    "\U0001F381 <b>Первые 50 объявлений — бесплатно 3 месяца.</b> Платы за публикацию нет, "
+    "комиссии с арендатора нет.\n\n"
     "\U0001F50D Ты <b>ищешь</b> → открыл карточку, связываешься напрямую.\n"
-    "\u2795 Ты <b>сдаёшь</b> → подай объявление в боте. Бесплатно, 2 минуты.\n\n"
-    "Комиссии нет ни с кого. Жми кнопку \U0001F447\n\n"
+    "\u2795 Ты <b>сдаёшь</b> → подай объявление, его увидят все. Бесплатно, 2 минуты.\n\n"
+    "Хочешь, чтобы твоё объявление показывалось другим — жми кнопку \U0001F447\n\n"
     "#аренда #однушки #кишинёв #chirie #безкомиссии"
 )
 
