@@ -25,7 +25,10 @@ from aiogram.types import BufferedInputFile
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DATA = json.load(open(os.path.join(HERE, "listings.json"), encoding="utf-8"))
+# default showcase seed; a caller may point at another file (e.g. the rentix-scraped board):
+#   python seed_test_data.py rentix_listings.json
+LISTINGS_FILE = sys.argv[1] if len(sys.argv) > 1 else "listings.json"
+DATA = json.load(open(os.path.join(HERE, LISTINGS_FILE), encoding="utf-8"))
 IMAGES_DIR = os.path.join(HERE, "images")
 
 sys.path.insert(0, "/opt/imobiliare/bot")
