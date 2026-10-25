@@ -2,7 +2,7 @@
 import os
 
 from aiogram import Bot
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, WebAppInfo
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 
 import config
 import db
@@ -46,10 +46,11 @@ def contact_kb(row, owner) -> InlineKeyboardMarkup | None:
     without_tg = {k: v for k, v in contacts.items() if k != "telegram"}
     rows.extend(keyboards.contact_buttons(without_tg))
     if config.WEBAPP_URL:
-        # Mini App launch (web_app) so the tap carries initData; a plain url would open the
-        # in-app browser signed out and the owner's "Разместить" would 401.
+        # a channel post CANNOT carry a web_app button (Telegram -> BUTTON_TYPE_INVALID), so the
+        # Mini App is linked as a plain url here. The initData-gated flow (placing / boosting an
+        # ad) lives in the bot DM card; the channel card only needs to open the board to browse.
         rows.append([InlineKeyboardButton(text="\U0001F50D Смотреть все объекты",
-                                         web_app=WebAppInfo(url=config.WEBAPP_URL))])
+                                         url=config.WEBAPP_URL)])
     elif config.CHANNEL_URL:
         rows.append([InlineKeyboardButton(text="\U0001F50D Смотреть все объекты", url=config.CHANNEL_URL)])
     # every channel post is a shareable advert: forwarding brings new viewers AND new owners
@@ -73,7 +74,7 @@ async def to_channel(bot: Bot, row) -> list[int]:
     # reinforce the CTA keyboard in text: when a card is forwarded, the buttons can be cut off
     # on preview, but the caption always travels with the photo.
     if config.BOT_URL:
-        caption += f"\n\n\U0001F4E3 Так же бесплатно → {config.BOT_URL}?start=add"
+        caption += f"\n\n\U0001F4E3 Также бесплатно → {config.BOT_URL}?start=add"
     owner = await db.get_user_by_id(row["user_id"])
     kb = contact_kb(row, owner)
     web_photos = [os.path.join(config.PHOTOS_DIR, f"{row['id']}_{i}.jpg")
@@ -83,7 +84,18 @@ async def to_channel(bot: Bot, row) -> list[int]:
         media = [InputMediaPhoto(media=render.resolve_photo(p), caption=caption if i == 0 else None, parse_mode="HTML")
                  for i, p in enumerate(web_photos)]
         sent = await bot.send_media_group(config.CHANNEL_ID, media)
-        msg = await bot.send_message(config.CHANNEL_ID, "↑ контакты и детали ниже", reply_markup=kb)
+        try:
+            msg = await bot.send_message(config.CHANNEL_ID, "↑ контакты и детали ниже", reply_markup=kb)
+        except Exception:
+            # the album is already live; if the buttons message is rejected (a bad button type,
+            # a lost connection) do not leave a button-less orphan card on the board - retract the
+            # just-posted album and let the caller retry the whole card cleanly.
+            for m in sent:
+                try:
+                    await bot.delete_message(config.CHANNEL_ID, m.message_id)
+                except Exception:
+                    pass
+            raise
         ids = [m.message_id for m in sent] + [msg.message_id]
     else:
         msg = await bot.send_message(config.CHANNEL_ID, caption, parse_mode="HTML", reply_markup=kb)

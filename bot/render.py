@@ -14,6 +14,17 @@ def esc(v) -> str:
     return html.escape(str(v)) if v is not None else ""
 
 
+def n(v):
+    """Trim a whole float stored in the REAL columns back to an int for display: the area column
+    is a float, so a 74 m² flat would otherwise render as the ugly '74.0 м²' on every card.
+    Non-numeric / fractional values pass through untouched."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return v
+    return int(f) if f.is_integer() else f
+
+
 def resolve_photo(value):
     """A listing photo can be a Telegram file_id (from the bot wizard) or a local file name /
     absolute path (uploaded through the Mini App, Phase D). aiogram only uploads a real file
@@ -69,11 +80,11 @@ def listing_caption(row, show_status: bool = False, founding: int = 0) -> str:
     if row["rooms"]:
         parts.append(f"{row['rooms']} комн.")
     if row["area"]:
-        parts.append(f"{row['area']} м²")
+        parts.append(f"{n(row['area'])} м²")
     if row["floor"]:
-        f = f"{row['floor']}"
+        f = f"{n(row['floor'])}"
         if row["floors"]:
-            f += f"/{row['floors']}"
+            f += f"/{n(row['floors'])}"
         parts.append(f"{f} этаж")
     if parts:
         lines.append(" · ".join(parts))

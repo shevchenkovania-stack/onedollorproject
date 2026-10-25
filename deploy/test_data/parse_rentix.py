@@ -194,18 +194,30 @@ def _webp_to_jpeg(blob: bytes, dest: str) -> bool:
         return False
 
 
+def _street(addr: str) -> str:
+    """'str. Alecu Russo, Rîșcani' / 'str. Cornesti 19, Buiucani' -> 'ул. Alecu Russo' / 'ул. Cornesti 19'.
+    Keep only the street (drop the sector + city: the card header already shows the district),
+    and localise the Romanian 'str./strada' prefix to the board's 'ул.'."""
+    if not addr:
+        return ""
+    street = addr.split(",")[0].strip()
+    street = re.sub(r"(?i)^(str\.?|strada|ul\.?)\s+", "ул. ", street)
+    street = re.sub(r"(?i)^(bd\.?|b-dul|bulevardul)\s+", "бул. ", street)
+    street = re.sub(r"(?i)^(calea|cal\.?)\s+", "калеа ", street)
+    return street.strip()
+
+
 def _description(c: dict) -> str:
-    lines = [f"{c['district']} · Кишинёв"]
-    facts = [f"{c['rooms']}-комн. квартира"]
-    if c["area"]:
-        facts.append(f"{c['area']} м²")
-    if c["floor"]:
-        facts.append(f"{c['floor']}/{c['floors']} этаж" if c["floors"] else f"{c['floor']} этаж")
-    lines.append(" · ".join(facts))
-    if c["addr"]:
-        lines.append(c["addr"].replace(", Chișinău", "").replace(", Chişinău", ""))
+    """A short body that ADDS to the card header (which already lists rooms / area / floor /
+    district / price) instead of repeating it: just the street, the deal type, and an honest
+    source line pointing to the rentix button."""
+    lines = []
+    st = _street(c["addr"])
+    if st:
+        lines.append(st)
+    lines.append("Аренда на длительный срок · Кишинёв")
     lines.append("")
-    lines.append("Реальная аренда из rentix.md — контакты и все фото по кнопке «Сайт».")
+    lines.append("Источник: rentix.md — контакты и все фото по кнопке «Сайт».")
     return "\n".join(lines).strip()
 
 
